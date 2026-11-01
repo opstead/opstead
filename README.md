@@ -5,6 +5,10 @@ running is not. OPStead is an ops contract an app serves about itself, and an op
 it watches, keeps one ledger of problems, tells you once per change, lets an AI investigate, and runs
 only the fixes the app itself declared safe, asking you first when they matter.
 
+Made for the **one-person company**: one founder shipping several products with coding agents, and
+nobody else on call. OPStead is the colleague who watches them, tells you only what changed, and asks
+before touching anything.
+
 *OPS* and *stead* share the S: a homestead for your apps' ops, and something that stands you in good stead.
 
 ## Status
