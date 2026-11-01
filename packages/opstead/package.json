@@ -1,0 +1,43 @@
+{
+  "name": "opstead",
+  "version": "0.1.0",
+  "description": "Care for the apps you ship: check an app against the OPStead ops contract (health, components, tools, guarded actions).",
+  "homepage": "https://github.com/opstead/opstead#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/opstead/opstead.git",
+    "directory": "packages/opstead"
+  },
+  "bugs": "https://github.com/opstead/opstead/issues",
+  "type": "module",
+  "bin": {
+    "opstead": "bin/opstead.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/check.d.mts",
+      "default": "./lib/check.mjs"
+    }
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "ops",
+    "monitoring",
+    "health-check",
+    "ai-agent",
+    "self-hosted",
+    "sre"
+  ],
+  "license": "MIT"
+}
