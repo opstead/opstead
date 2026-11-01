@@ -1,13 +1,14 @@
 ---
 name: opstead
-description: Add the OPStead ops contract to an app so an operator can watch it, place problems in it, investigate it and run the fixes it declares safe. Use when the user wants an app monitored by OPStead, asks for /ops/health, /ops/manifest, ops tools or ops actions, wants an app "onboarded", "made watchable" or "brought to level N", or asks what `opstead check` reports and how to fix it.
+description: Add the OPStead ops contract to an app so an operator can watch it, place problems in it, investigate it and run the fixes it declares safe, and register apps, machines and sites with the operator (its plugins for hosts, networks, edge providers, notice channels and login). Use when the user wants an app monitored by OPStead, asks for /ops/health, /ops/manifest, ops tools or ops actions, wants an app "onboarded", "made watchable" or "brought to level N", wants a server, machine or website brought under watch, or asks what `opstead check` reports and how to fix it.
 ---
 
 # Onboard an app to the OPStead contract
 
 The contract is in `spec/CONTRACT.md` of github.com/opstead/opstead (read it when a detail here is
 not enough; this skill is the working summary). Code patterns per framework are in
-`reference/patterns.md` next to this file. The checker is `npx opstead check <url> --token <token>`.
+`reference/patterns.md` next to this file; registering the app, a machine or a website with the
+operator, and which plugin each field picks, is `reference/operator.md`. The checker is `npx opstead check <url> --token <token>`.
 
 The app is the authority on itself: it says what is wrong, what it is made of, what is normal, what
 may be looked at and what may be done. Your job is to write those down **from what the code really
@@ -244,7 +245,13 @@ npx -y opstead check http://127.0.0.1:<port> --token "$OPS_TOKEN"
 Fix every `error`. Fix each `warn` or say in your report why it stays. Repeat until it reports the
 target level. `--json` gives the same report for parsing. Stop the app afterwards by its PID.
 
-## 9. Report to the user
+## 9. Register with the operator
+
+If you can reach the operator's apps file (the user says where), add the entry as
+`reference/operator.md` shows; otherwise put the entry in your report. A machine or website with no
+app of its own (a server, a hosted site) needs only that step: skip 0-8.
+
+## 10. Report to the user
 
 - The level reached and the checker's remaining warnings.
 - The checks, components, tools and actions added, one line each.
