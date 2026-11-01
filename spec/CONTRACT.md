@@ -116,7 +116,7 @@ Each component:
 
 | Field | | |
 |---|---|---|
-| `id` | MUST | Unique within the app, `snake_case`. |
+| `id` | MUST | Unique within the app, `snake_case` (`owner_page`, not `owner-page`). |
 | `kind` | MUST | `service` (a process of the app), `job` (scheduled work), `store` (a database, a bucket, files), `external` (someone else's system), `ui` (a site or page people use). |
 | `name` | SHOULD | How people call it. |
 | `depends_on` | MAY | Ids of components this one needs. Each MUST be an id in the same manifest. Drawn as arrows; a failing dependency explains a failing dependant. |
@@ -214,26 +214,30 @@ Idempotency-Key: 6f1c…
 The body is the params as a JSON object, plus `reason` (why the operator runs it, for the app's own
 log) and, when declared, `dry_run`.
 
-The app MUST:
+The app MUST, in this order:
 
-1. **Check the token and the params** (`400 {"error": "…"}` when wrong, `404` for an unknown action).
-2. **Re-check its preconditions**, in its own terms, at the moment of the call. The operator's view may
+1. **Check the token** (`404` without it) and that the action exists (`404`).
+2. **Honour `Idempotency-Key`** first: the same key again (within at least 24 h) returns the first
+   answer without running a second time, even when the first run changed what step 4 would now
+   refuse. A key whose first request is still running answers `409 {"error": "already running"}`.
+   An action that can end the app's own process stores its answer before it acts.
+3. **Check the params** (`400 {"error": "…"}` when wrong).
+4. **Re-check its preconditions**, in its own terms, at the moment of the call. The operator's view may
    be minutes old. When they do not hold, answer `409 {"error": "<why, one sentence>"}` and change nothing.
    *Example: "its last 2 polls did not both fail".*
-3. **Honour `dry_run`**: when `true`, change nothing and answer `200 {"dry_run": true, "would": "<what it would do>"}`.
-4. **Honour `Idempotency-Key`**: the same key again (within at least 24 h) MUST return the first answer
-   without running a second time.
-5. **Do it, log it, answer** `200 {"result": "<what was done>"}`, with `verify` when the effect can be checked.
+5. **Honour `dry_run`**: when `true`, change nothing and answer `200 {"dry_run": true, "would": "<what it would do>"}`.
+6. **Do it, log it, answer** `200 {"result": "<what was done>"}`, with `verify` when the effect can be checked.
 
 ```json
 { "result": "hidden", "verify": { "check": "stale", "subject": "supplier-a", "after": "40m" } }
 ```
 
-`verify` names the `/ops/health` check (and subject) that should be `ok` after `after`. The operator
+`verify` names the `/ops/health` check (and subject) that should be `ok`, or no longer reported, after `after`. The operator
 looks again then and tells the owner whether the fix held. Without `verify` the operator only records
 the result.
 
-Any other status is a failure; put the reason in `{"error": "…"}`.
+Any other status is a failure; put the reason in `{"error": "…"}`. An app that enforces `limit` itself
+answers `409` when it is used up.
 
 The app SHOULD keep its own log of actions run through the contract (who, when, params, reason,
 result), independent of the operator's.

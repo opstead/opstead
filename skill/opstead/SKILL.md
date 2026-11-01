@@ -62,6 +62,8 @@ localhost for `/ops/*` only, and say so.
   404 without it. Any body is fine on a 404.
 - Mount the routes under `/ops/` in the app's own style (a router, a plugin, a blueprint). Anything
   else under `/ops/` (an unknown path, a wrong method, `/ops/actions/*` before level 4) answers 404.
+  Frameworks answer a wrong method with 405 by default (FastAPI, Starlette, some routers): add a
+  catch-all `/ops/{path}` for every method, last.
 
 ## 3. Level 1: `GET /ops/health`
 
@@ -99,6 +101,13 @@ Rules (the ledger depends on them):
 - **Per store**: Postgres/MySQL `SELECT 1` with a statement timeout; SQLite also a `busy_timeout`, since
   its real failure is a writer's lock; a bucket or a directory: list or stat one known key.
 - Write checks that depend on the time with an injectable "now" so tests can set it.
+- **State kept in memory** (counters since start, the last call's result) is empty after a restart:
+  report `ok` "nothing to judge since start-up" until there is enough, rather than a false alarm.
+- **A job inside the service** (a timer in the process, not cron): its heartbeat is still the
+  operator's (step 4); the app may add a freshness check on what the job produces (`stale`), not on
+  whether the timer fired.
+- A single failure may be a `warn` as a count ("1 search failed in the last hour"); the minimum
+  count applies to grading a share as `bad`.
 
 ## 4. Level 2: `components` in `GET /ops/manifest`
 
@@ -106,6 +115,8 @@ Manifest: `{ app, contract: "0.1", version, components, context, tools, actions 
 
 One component per part found in step 1:
 
+- `id`: snake_case (`owner_page`, not `owner-page` or `channel:x`); one built from config is
+  normalised to snake_case the same way every time.
 - `kind`: `service` (a process), `job` (scheduled work), `store`, `external` (someone else's system),
   `ui` (a site people use).
 - `depends_on`: what it needs, by id (every id must exist).
@@ -137,7 +148,9 @@ two per non-`ok`-able check: "which items are stale and why", "the last N errors
 
 - `{ name, description, params?, network? }`; served as `GET /ops/tools/<name>?param=…`.
 - Strictly read-only. Validate params (400), hard row limit (50), small JSON reply.
-- No secrets, tokens, or personal data the investigator does not need.
+- No secrets, tokens, or personal data the investigator does not need. Error texts from providers
+  often echo part of a key: blank anything key-shaped (`sk-…`, long hex or base64, `Bearer …`)
+  before it leaves. "Row limit 50" means 50 lines for a log tail.
 - `network: true` if it calls someone else's server.
 
 ## 6. Level 4: `actions` (only after the user agreed)
@@ -148,18 +161,26 @@ Each action: `{ name, description, params?, risk, limit, rollback?, dry_run?, sc
 - `risk`: `low` = small and undoable, safe unasked; `medium` = users would notice or data that matters
   changes, the owner approves; `high` = hard to undo, never run by default. When unsure, go higher.
 - `limit`: `"<n>/<duration>"` that bounds the damage of a loop (`"1/45m"`, `"20/1d"`).
-- The handler must, in order: check params (400); **re-check its preconditions now** and answer
-  `409 {"error": "<why>"}` without changing anything if they do not hold; on `dry_run: true` answer
-  `{"dry_run": true, "would": "<what it would do>"}` and change nothing; honour `Idempotency-Key`
-  (same key → same answer, no second run, keep keys 24 h); then act, log (who, params, reason,
-  result) and answer `{"result": "<what was done>", "verify": {check, subject?, after}}` when a health
-  check should turn `ok` afterwards.
-- Under the `Idempotency-Key`, store the status and body of the answer for 24 h. A second request
-  with a key whose first run is still going answers `409 {"error": "already running"}`.
-- An action that ran but whose effect did not take (the job started and failed at once) answers 200
-  with a `result` that says so honestly; `verify` lets the operator see the problem stayed.
-- The operator enforces `limit`; the app MAY enforce it too (count its own log), which also guards
-  against anything else holding the token.
+- The handler does these **in this order**:
+  1. **`Idempotency-Key` first.** A key seen in the last 24 h returns the stored status and body, with
+     no other work (a retry after a run that changed things must get the first answer, not a 409).
+     A key whose first request is still running answers `409 {"error": "already running"}`.
+  2. **Params** (400).
+  3. **Limit**, if the app enforces it (409 with "limit of 3 a day reached").
+  4. **Preconditions, re-checked now** (409 `{"error": "<why>"}`), changing nothing.
+  5. **Dry run**: `{"dry_run": true, "would": "<what it would do>"}`, changing nothing.
+  6. **Run, log, answer** `{"result": "<what was done>", "verify": {check, subject?, after}}`.
+- Store under the key the answer of every run that changed or may have changed something, including
+  one that failed with a 500, and count those runs against the limit. Do not store 400, 409 or dry runs.
+- Keys kept in memory die with the process. Keep them in the app's database or a file; an action that
+  can end the app's own process (a restart, an upgrade) MUST store its answer **before** it acts.
+- An action whose effect shows only later, or after the reply (a restart, a job started in the
+  background), answers what it did ("restart scheduled") and names a `verify`; the operator looks
+  again after `after`. An effect that visibly did not take answers 200 with a `result` that says so.
+- `verify` holds when the named check is `ok` **or no longer reported** (an action that removes the
+  thing the check was about).
+- The operator enforces `limit`; the app SHOULD enforce it too by counting its own action log (see
+  `reference/patterns.md`), which also guards against anything else holding the token.
 - In the app's log, "who" is the source (`ops`) plus the `reason` the operator sent; there is one token.
 - Ignore body fields you do not know (the operator adds `reason` and `dry_run`; later versions may add
   more). Reject only declared params that are missing or of the wrong type.
@@ -179,7 +200,8 @@ The checker only reads: it never calls tools or actions. Their 400, 409, dry run
 covered by the tests of step 7, so those tests are not optional.
 
 
-Start the app locally with `OPS_TOKEN` set and run (use `127.0.0.1`, not `localhost`, which may
+Start the app locally with `OPS_TOKEN` set and **the settings production uses** (the components and
+checks often depend on them; read the production env's keys, never print their values), and run (use `127.0.0.1`, not `localhost`, which may
 resolve to `::1` while the app listens on IPv4 only):
 
 ```bash

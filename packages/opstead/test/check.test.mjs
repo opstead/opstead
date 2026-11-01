@@ -72,6 +72,16 @@ describe("opstead check", () => {
   });
 });
 
+describe("0.1 details", () => {
+  it("warns on a missing contract, launchd, a 401 without the token, and ids that are not snake_case", async () => {
+    const m = { ...manifest, contract: undefined, components: [{ id: "owner-page", kind: "service", launchd: "x.y", checks: [{ id: "db" }] }] };
+    const unauth = (async (url, init) => (init?.headers?.authorization === "Bearer t" ? app({ "/ops/health": health, "/ops/manifest": m })(url, init) : new Response("", { status: 401 })));
+    const r = await checkApp("https://shop.example", { token: "t", fetch: unauth });
+    for (const where of ["manifest.contract", "manifest.components[owner-page].id", "manifest.components[owner-page].launchd", "auth"]) assert.ok(has(r.findings, { level: "warn", where }), where);
+    assert.equal(r.level, 4);
+  });
+});
+
 describe("the spec's examples", () => {
   it("reach level 4 with no errors", async () => {
     const read = (p) => JSON.parse(readFileSync(new URL(`../../../spec/examples/${p}`, import.meta.url), "utf8"));

@@ -8,3 +8,6 @@ First published version, written down from what a private operator and its apps 
 
 - `service` on a component names the host service that runs it; `launchd` stays as an older spelling.
 - `contract` in the manifest says which version the app follows.
+- Clarified after the first onboardings (no change of meaning): `Idempotency-Key` is looked up before
+  anything else; "already running" is a 409; an exhausted limit is a 409; `verify` also holds when the
+  check is no longer reported; component ids are snake_case.

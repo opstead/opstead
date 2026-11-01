@@ -97,6 +97,9 @@ export function validateManifest(body, healthIds) {
   }
   const m = /** @type {Record<string, unknown>} */ (body);
 
+  if (m.contract === undefined) out.push({ level: "warn", where: "manifest.contract", message: 'missing: say which contract version the app follows ("0.1")' });
+  else if (typeof m.contract !== "string") out.push({ level: "warn", where: "manifest.contract", message: 'must be a string like "0.1"' });
+
   // Level 2: components.
   const comps = m.components === undefined ? [] : m.components;
   if (!Array.isArray(comps)) add(2, "error", "manifest.components", "must be an array");
@@ -110,6 +113,8 @@ export function validateManifest(body, healthIds) {
       const at = `manifest.components[${c.id}]`;
       if (dup.has(c.id)) add(2, "error", at, "id appears twice");
       dup.add(c.id);
+      if (!ID.test(c.id)) add(2, "warn", `${at}.id`, "use snake_case (owner_page, not owner-page or a:b)");
+      if (c.launchd !== undefined && c.service === undefined) add(2, "warn", `${at}.launchd`, "write service instead (launchd is the older spelling)");
       if (!KINDS.includes(c.kind)) add(2, "error", `${at}.kind`, `must be one of ${KINDS.join(", ")}`);
       if (c.depends_on !== undefined && !Array.isArray(c.depends_on)) add(2, "error", `${at}.depends_on`, "must be an array of component ids");
       for (const d of Array.isArray(c.depends_on) ? c.depends_on : []) if (!ids.has(d)) add(2, "error", `${at}.depends_on`, `"${d}" is not a component id`);
@@ -213,9 +218,10 @@ export async function checkApp(url, opts = {}) {
 
   if (opts.token) {
     // The routes must not answer without the token.
-    const open = await get("/ops/health", {}).then((r) => r.ok, () => false);
-    if (open) findings.push({ level: "error", where: "auth", message: "/ops/health answers without the token: put /ops/* behind it" });
-    else findings.push({ level: "ok", where: "auth", message: "/ops/* refuses requests without the token" });
+    const status = await get("/ops/health", {}).then((r) => r.status, () => 0);
+    if (status >= 200 && status < 300) findings.push({ level: "error", where: "auth", message: "/ops/health answers without the token: put /ops/* behind it" });
+    else if (status === 404) findings.push({ level: "ok", where: "auth", message: "/ops/* refuses requests without the token" });
+    else findings.push({ level: "warn", where: "auth", message: `/ops/health answers ${status || "nothing"} without the token; answer 404, so the routes do not advertise themselves` });
   } else findings.push({ level: "warn", where: "auth", message: "/ops/health answered without a token: put /ops/* behind one (OPS_TOKEN)" });
 
   const metrics = await get("/ops/metrics").then((r) => r.ok, () => false);

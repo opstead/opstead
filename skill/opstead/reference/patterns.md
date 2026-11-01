@@ -244,9 +244,10 @@ app.register_blueprint(ops)
 
 ## Actions: the one runner
 
-`checkParams` below also serves the tools. Every action goes through one function, so preconditions, dry run, idempotency and the log are never
-forgotten. Keep the idempotency answers in the app's database when it has one (a table keyed by the
-key, kept 24 h); the in-memory map below only holds while the process lives.
+`checkParams` below also serves the tools. Every action goes through one function, so idempotency, limits, preconditions, dry run and the log
+are never forgotten. Keep the idempotency answers in the app's database or a file (a table keyed by
+the key, kept 24 h); the in-memory map below only shows the order and dies with the process. An action
+that ends the process (a restart) writes its answer there before it acts.
 
 ```js
 const seen = new Map(); // key -> { at, status, body }
@@ -278,19 +279,39 @@ export async function runAction(name, body, key, deps) {
   if (!action) return { status: 404, body: { error: `unknown action ${name}` } };
   const now = Date.now();
   for (const [k, v] of seen) if (now - v.at > DAY) seen.delete(k);
-  if (key && seen.has(key)) return seen.get(key);
+  // 1. A retry gets the first answer, before anything else is looked at.
+  if (key && seen.has(key)) {
+    const first = seen.get(key);
+    return first.running ? { status: 409, body: { error: "already running" } } : first;
+  }
 
-  const { reason, dry_run, ...params } = body;
+  const { reason, dry_run, ...params } = body; // other unknown fields are ignored
   const bad = checkParams(action.params, params);
   if (bad) return { status: 400, body: { error: bad } };
+  const used = await deps.log.countSince(name, now - limitWindowMs(action.limit));
+  if (used >= limitCount(action.limit)) return { status: 409, body: { error: `limit of ${action.limit} reached` } };
   const why = await action.precondition(params, deps);
   if (why) return { status: 409, body: { error: why } };
   if (dry_run === true) return { status: 200, body: { dry_run: true, would: await action.describe(params, deps) } };
 
-  const reply = { status: 200, body: await action.run(params, deps) };
-  await deps.log.action({ name, params, reason, result: reply.body.result });
+  if (key) seen.set(key, { at: now, running: true });
+  let reply;
+  try {
+    reply = { status: 200, body: await action.run(params, deps) };
+  } catch (err) {
+    reply = { status: 500, body: { error: err.message } };
+  }
+  await deps.log.action({ name, params, reason, status: reply.status, result: reply.body.result ?? reply.body.error });
   if (key) seen.set(key, { at: now, ...reply });
   return reply;
+}
+
+// "3/1d" -> 3 and one day in ms.
+const UNIT = { ms: 1, s: 1e3, m: 6e4, h: 36e5, d: 864e5 };
+const limitCount = (limit) => (limit ? Number(limit.split("/")[0]) : Infinity);
+function limitWindowMs(limit) {
+  const m = /\/\s*(\d+)\s*(ms|s|m|h|d)$/.exec(limit ?? "");
+  return m ? Number(m[1]) * UNIT[m[2]] : 0;
 }
 
 function checkParams(spec = {}, params) {
