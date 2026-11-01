@@ -12,7 +12,7 @@ export const RISKS = ["low", "medium", "high"];
 const ID = /^[a-z][a-z0-9_]*$/;
 const DURATION = /^\d+(?:\.\d+)?\s*(?:ms|s|m|h|d)$/;
 /** Checks the operator adds itself (launchd, heartbeats, probes); an app never reports them. */
-const OPERATOR_CHECKS = ["service_down", "heartbeat_missed", "job_failed", "http_down", "http_slow"];
+const OPERATOR_CHECKS = ["service_down", "heartbeat_missed", "job_failed", "http_down", "http_slow", "slow"];
 const LIMIT = /^\d+\s*\/\s*\d+\s*(?:ms|s|m|h|d)$/;
 
 /** @typedef {{ level: "error" | "warn" | "ok", where: string, message: string }} Finding */
