@@ -106,6 +106,9 @@ Rules (the ledger depends on them):
 - **A job inside the service** (a timer in the process, not cron): its heartbeat is still the
   operator's (step 4); the app may add a freshness check on what the job produces (`stale`), not on
   whether the timer fired.
+- **Started on demand** (a headless browser, a worker pool, a model loaded when asked): absent while
+  nothing needs it is the design, so `ok` with a detail that says so; `bad` only when work is waiting
+  for it and it is not there.
 - A single failure may be a `warn` as a count ("1 search failed in the last hour"); the minimum
   count applies to grading a share as `bad`.
 
