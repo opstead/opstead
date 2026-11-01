@@ -303,7 +303,7 @@ function checkParams(spec = {}, params) {
     if (p.type === "uuid" && !/^[0-9a-f-]{36}$/i.test(String(v))) return `${name} must be a uuid`;
     if ((p.type === "integer" || p.type === "int") && !Number.isInteger(Number(v))) return `${name} must be an integer`;
   }
-  for (const name of Object.keys(params)) if (!(name in spec)) return `unknown param ${name}`;
+  // Fields not declared are ignored: the operator adds reason and dry_run, later versions may add more.
   return null;
 }
 ```

@@ -23,7 +23,7 @@ does**, not to add generic monitoring.
 | 4 hands | `actions` that change things | only with the user's yes, action by action |
 
 Go to level 3 without asking. Before level 4, list the actions you propose (name, what it changes,
-risk, limit, preconditions) and wait for the user to agree; an action is a standing permission for a
+risk, limit, preconditions, dry run, rollback, the check `verify` will name) and wait for the user to agree; an action is a standing permission for a
 machine to change their system.
 
 ## 1. Survey before writing
@@ -54,11 +54,12 @@ localhost for `/ops/*` only, and say so.
 ## 2. The token and the routes
 
 - Read `OPS_TOKEN` from the environment. If it is unset, the `/ops/*` routes answer 404 (the app
-  still starts). Add `OPS_TOKEN=` to the example env file and never commit a value. Tell the user to
+  still starts). Add `OPS_TOKEN=` to the example env file and never commit a value (check the example file is
+  really tracked: `git check-ignore -v <file>`; a `.env.*` rule often hides it, and say so if it does). Tell the user to
   set it (`openssl rand -hex 24`) wherever the server process gets its environment; if the app loads
   no env file, say exactly that rather than adding a loader.
 - Check `Authorization: Bearer <token>` with a constant-time compare on every `/ops/*` route; answer
-  404 without it.
+  404 without it. Any body is fine on a 404.
 - Mount the routes under `/ops/` in the app's own style (a router, a plugin, a blueprint). Anything
   else under `/ops/` (an unknown path, a wrong method, `/ops/actions/*` before level 4) answers 404.
 
@@ -153,6 +154,15 @@ Each action: `{ name, description, params?, risk, limit, rollback?, dry_run?, sc
   (same key → same answer, no second run, keep keys 24 h); then act, log (who, params, reason,
   result) and answer `{"result": "<what was done>", "verify": {check, subject?, after}}` when a health
   check should turn `ok` afterwards.
+- Under the `Idempotency-Key`, store the status and body of the answer for 24 h. A second request
+  with a key whose first run is still going answers `409 {"error": "already running"}`.
+- An action that ran but whose effect did not take (the job started and failed at once) answers 200
+  with a `result` that says so honestly; `verify` lets the operator see the problem stayed.
+- The operator enforces `limit`; the app MAY enforce it too (count its own log), which also guards
+  against anything else holding the token.
+- In the app's log, "who" is the source (`ops`) plus the `reason` the operator sent; there is one token.
+- Ignore body fields you do not know (the operator adds `reason` and `dry_run`; later versions may add
+  more). Reject only declared params that are missing or of the wrong type.
 - Never an action that runs free text (shell, SQL, a URL to fetch). Params are values for one fixed
   operation. Prefer `dry_run: true` for every medium action, and a `rollback` action when one exists.
 
@@ -164,6 +174,10 @@ read-only-ness, and for each action: 400, 409 on a failed precondition, dry run 
 idempotency, the real run. Run the app's whole test suite.
 
 ## 8. Verify with the checker
+
+The checker only reads: it never calls tools or actions. Their 400, 409, dry run and idempotency are
+covered by the tests of step 7, so those tests are not optional.
+
 
 Start the app locally with `OPS_TOKEN` set and run (use `127.0.0.1`, not `localhost`, which may
 resolve to `::1` while the app listens on IPv4 only):
