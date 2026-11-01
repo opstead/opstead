@@ -229,6 +229,20 @@
         "schedule": {
           "type": "string",
           "pattern": "^\\d+(\\.\\d+)?\\s*(ms|s|m|h|d)$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "A few plain words for the owner's page and notices; the description is for the AI."
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "description": "The health check ids this action can help with; an operator shows it first on those problems."
         }
       }
     },

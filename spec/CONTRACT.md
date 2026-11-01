@@ -180,7 +180,7 @@ it may happen.
 
 ```json
 "actions": [
-  { "name": "retry_sync", "description": "Runs the price sync for one supplier now", "params": { "supplier": { "type": "string", "required": true } }, "risk": "low", "limit": "1/45m", "rollback": null, "dry_run": true },
+  { "name": "retry_sync", "title": "Sync this supplier now", "checks": ["stale"], "description": "Runs the price sync for one supplier now", "params": { "supplier": { "type": "string", "required": true } }, "risk": "low", "limit": "1/45m", "rollback": null, "dry_run": true },
   { "name": "hide_product", "description": "Hides a product whose supplier page is gone", "params": { "product_id": { "type": "uuid", "required": true } }, "risk": "medium", "limit": "30/1d", "rollback": "show_product", "dry_run": true },
   { "name": "show_product", "description": "Shows a hidden product again", "params": { "product_id": { "type": "uuid", "required": true } }, "risk": "low", "limit": "30/1d" },
   { "name": "sweep_stale", "description": "Retries every product stale for more than a day, at most `limit` of them", "params": { "limit": { "type": "integer" } }, "risk": "low", "limit": "2/1d", "dry_run": true, "schedule": "1d" }
@@ -197,6 +197,12 @@ it may happen.
 | `rollback` | MAY | The name of another action that undoes this one, or `null` when there is none. |
 | `dry_run` | MAY | `true` when the action accepts `"dry_run": true` and then only says what it would do. SHOULD be `true` for `medium`: the owner approves what they can see. |
 | `schedule` | MAY | A duration (`"1d"`): the operator may run it on its own that often, still through its policy. For housekeeping. |
+| `title` | SHOULD | A few plain words for the owner (`"Sync this supplier now"`, at most 60 characters). The operator shows it on its page and in approvals; `description` is for the AI and may be long. |
+| `checks` | MAY | The health check ids it can help with (`["stale"]`). When the owner takes such a problem in hand, the operator offers this action first. |
+
+The owner can run actions too, not only the AI: an operator offers them on a problem the owner has
+taken in hand, previews each one (`dry_run`) and runs what the preview showed. The app does nothing
+different for them; the `reason` says who asked.
 
 ### `POST /ops/actions/<name>`
 

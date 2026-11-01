@@ -189,12 +189,17 @@ For each operation that takes more than a few seconds (step 1):
 
 ## 6. Level 4: `actions` (only after the user agreed)
 
-Each action: `{ name, description, params?, risk, limit, rollback?, dry_run?, schedule? }`, served as
+Each action: `{ name, title, description, params?, risk, limit, rollback?, dry_run?, schedule?, checks? }`, served as
 `POST /ops/actions/<name>` with a JSON body of params plus `reason` and `dry_run`.
 
 - `risk`: `low` = small and undoable, safe unasked; `medium` = users would notice or data that matters
   changes, the owner approves; `high` = hard to undo, never run by default. When unsure, go higher.
 - `limit`: `"<n>/<duration>"` that bounds the damage of a loop (`"1/45m"`, `"20/1d"`).
+- `title`: a few plain words the owner understands at a glance ("Move the site to its new board"),
+  at most 60 characters. `description` is for the AI: what it changes, its preconditions, when to use it.
+- `checks`: the health check ids it helps with. The owner can take a problem in hand and run actions
+  themselves; these come first there, and a param named like a field of the check's `data` (or the
+  only param, from its `subject`) is filled in for them. So name params after those fields.
 - The handler does these **in this order**:
   1. **`Idempotency-Key` first.** A key seen in the last 24 h returns the stored status and body, with
      no other work (a retry after a run that changed things must get the first answer, not a 409).

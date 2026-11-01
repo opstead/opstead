@@ -107,7 +107,11 @@
       "risk": "low",
       "limit": "1/45m",
       "rollback": null,
-      "dry_run": true
+      "dry_run": true,
+      "title": "Sync this supplier now",
+      "checks": [
+        "stale"
+      ]
     },
     {
       "name": "hide_product",
@@ -121,7 +125,8 @@
       "risk": "medium",
       "limit": "30/1d",
       "rollback": "show_product",
-      "dry_run": true
+      "dry_run": true,
+      "title": "Hide a product"
     },
     {
       "name": "show_product",
@@ -133,7 +138,8 @@
         }
       },
       "risk": "low",
-      "limit": "30/1d"
+      "limit": "30/1d",
+      "title": "Show a product again"
     },
     {
       "name": "sweep_stale",
@@ -146,7 +152,8 @@
       "risk": "low",
       "limit": "2/1d",
       "dry_run": true,
-      "schedule": "1d"
+      "schedule": "1d",
+      "title": "Retry every stale product"
     }
   ],
   "operations": [

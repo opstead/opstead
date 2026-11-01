@@ -189,6 +189,12 @@ export function validateManifest(body, healthIds) {
       if (a.dry_run !== undefined && typeof a.dry_run !== "boolean") add(4, "error", `${at}.dry_run`, "must be true or false");
       if (a.risk === "medium" && a.dry_run !== true) add(4, "warn", `${at}.dry_run`, "a medium-risk action is easier to approve when it can show what it would do");
       if (a.schedule !== undefined && !(typeof a.schedule === "string" && DURATION.test(a.schedule))) add(4, "error", `${at}.schedule`, 'must be a duration like "1d"');
+      if (a.title !== undefined && !(isStr(a.title) && a.title.length <= 60)) add(4, "error", `${at}.title`, "must be a few words (at most 60 characters)");
+      if (a.title === undefined) add(4, "warn", `${at}.title`, 'missing: a few plain words for the owner ("Sync this supplier now"); the description is for the AI');
+      if (a.checks !== undefined) {
+        if (!Array.isArray(a.checks) || !a.checks.every(isStr)) add(4, "error", `${at}.checks`, "must be a list of health check ids");
+        else for (const id of a.checks) if (!healthIds.has(id) && !OPERATOR_CHECKS.includes(id)) add(4, "warn", `${at}.checks`, `"${id}" is not a check /ops/health reported now`);
+      }
       if (validateParams(a.params, `${at}.params`, out)) errorsAt[4] = true;
     });
   }

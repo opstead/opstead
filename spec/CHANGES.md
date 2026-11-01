@@ -1,5 +1,11 @@
 # Contract changes
 
+## 0.2, additions (2026-11-01)
+
+- Actions get `title` (SHOULD): a few plain words for the owner, since `description` is written for
+  the AI and grows long. And `checks` (MAY): the health checks an action helps with, so an operator
+  offers it first when the owner takes such a problem in hand and runs actions themselves. Additive.
+
 ## 0.2 (2026-11-01)
 
 - **Speed**: apps with long work record each run and its steps (size in units, durations) and serve
