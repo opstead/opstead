@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/manifest.schema.json",
   "title": "GET /ops/manifest",
-  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.1, levels 2-4). Cross-references (depends_on ids, rollback names) are checked by `opstead check`, not by this schema.",
+  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.2, levels 2-4). Cross-references (depends_on ids, rollback names) are checked by `opstead check`, not by this schema.",
   "type": "object",
   "properties": {
     "app": {
@@ -35,6 +35,12 @@
       "type": "array",
       "items": {
         "$ref": "#/definitions/action"
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/operation"
       }
     }
   },
@@ -221,6 +227,35 @@
           "type": "boolean"
         },
         "schedule": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?\\s*(ms|s|m|h|d)$"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          }
+        },
+        "target": {
           "type": "string",
           "pattern": "^\\d+(\\.\\d+)?\\s*(ms|s|m|h|d)$"
         }

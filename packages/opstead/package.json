@@ -1,7 +1,7 @@
 {
   "name": "opstead",
-  "version": "0.1.2",
-  "description": "Care for the apps you ship: check an app against the OPStead ops contract (health, components, tools, guarded actions).",
+  "version": "0.2.0",
+  "description": "Care for the apps you ship: check an app against the OPStead ops contract 0.2 (health, components, tools, guarded actions, speed).",
   "homepage": "https://github.com/opstead/opstead#readme",
   "repository": {
     "type": "git",

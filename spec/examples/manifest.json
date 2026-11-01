@@ -1,6 +1,6 @@
 {
   "app": "shop",
-  "contract": "0.1",
+  "contract": "0.2",
   "version": "3c49e78",
   "context": "Sells garden tools in Canada. Every hour the price sync pulls from three suppliers; Supplier A answers 403 for a few minutes after midnight UTC while it rebuilds, which is normal. Orders are low on weekends.",
   "components": [
@@ -36,6 +36,10 @@
       "checks": [
         {
           "id": "stale"
+        },
+        {
+          "id": "slow",
+          "subject": "sync"
         }
       ]
     },
@@ -92,6 +96,18 @@
         }
       },
       "network": true
+    },
+    {
+      "name": "timings",
+      "description": "The last runs of an operation with each step's duration and units, newest first",
+      "params": {
+        "operation": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      }
     }
   ],
   "actions": [
@@ -147,6 +163,18 @@
       "limit": "2/1d",
       "dry_run": true,
       "schedule": "1d"
+    }
+  ],
+  "operations": [
+    {
+      "name": "sync",
+      "description": "One price sync for one supplier",
+      "unit": "products",
+      "steps": [
+        "fetch",
+        "save"
+      ],
+      "target": "300ms"
     }
   ]
 }

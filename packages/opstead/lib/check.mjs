@@ -157,6 +157,17 @@ export function validateManifest(body, healthIds) {
     if (has.knowledge && !tools.length) add(3, "warn", "manifest.tools", "none: read-only tools let the AI look at the app's own data");
   }
   for (const c of Array.isArray(comps) ? comps : []) if (isObj(c) && isStr(c.id) && c.description !== undefined && !isStr(c.description)) add(3, "error", `manifest.components[${c.id}].description`, "must be a string");
+  if (m.operations !== undefined) {
+    if (!Array.isArray(m.operations)) add(3, "error", "manifest.operations", "must be an array of {name, description?, unit?, steps?, target?}");
+    else m.operations.forEach((o, i) => {
+      if (!isObj(o) || !isStr(o.name)) return add(3, "error", `manifest.operations[${i}]`, "needs a name");
+      const at = `manifest.operations[${o.name}]`;
+      if (!ID.test(o.name)) add(3, "warn", `${at}.name`, "use snake_case (it is the subject of its slow check)");
+      if (o.steps !== undefined && !(Array.isArray(o.steps) && o.steps.every(isStr))) add(3, "error", `${at}.steps`, "must be an array of step names");
+      if (o.target !== undefined && !(typeof o.target === "string" && DURATION.test(o.target))) add(3, "error", `${at}.target`, 'must be a duration per unit like "4s"');
+      if (!healthIds.has("slow")) add(3, "warn", at, "declared, but /ops/health reports no slow check: judge it there (subject: the operation or operation.step)");
+    });
+  }
 
   // Level 4: actions.
   const actions = m.actions === undefined ? [] : m.actions;

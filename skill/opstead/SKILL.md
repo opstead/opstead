@@ -36,6 +36,9 @@ Read enough of the app to answer, and keep the answers in your head for every la
 - What already goes wrong or is watched: existing health routes, logged errors, retries, timeouts,
   rate limits, "stale" data, queues that back up, comments that say "this happens sometimes".
 - What is *normal* that looks like a fault: expected 403s, quiet weekends, a nightly window.
+- Which work takes more than a few seconds (a search, a sync, an import), what one run of it is, how
+  its size is counted, and which steps it goes through: look at the progress it shows users and its
+  log lines. Which of those steps wait on someone else's system.
 - What a person does by hand when something breaks (rerun a job, disable a bad record, clear a lock):
   those are the candidate actions.
 - How it is configured (env file, secrets) and deployed, and which processes share that config (a
@@ -109,6 +112,17 @@ Rules (the ledger depends on them):
 - **Started on demand** (a headless browser, a worker pool, a model loaded when asked): absent while
   nothing needs it is the design, so `ok` with a detail that says so; `bad` only when work is waiting
   for it and it is not there.
+- **Speed** (contract section "Speed"), for each long operation found in step 1:
+  - Record every run and its steps in the app's own store (a table or a JSONL file; see
+    `reference/patterns.md`): operation, size in units, start, duration, outcome; per step: name,
+    duration, units, outcome. Waiting on an outside system is its own step. Keep 7 days or 100 runs.
+  - Add `slow` with `subject` = the operation, and one per step that can drag on its own
+    (`search.calendar`). Compare the median duration **per unit** of the last 3+ runs with the median
+    of the previous 7 days (or a target the code states): `warn` from 2×, `bad` from 4×. Fewer than 3
+    runs, or a baseline not built yet → `ok`, nothing to judge. Never compare raw totals of runs of
+    different sizes.
+  - Declare the operations in the manifest (`operations: [{name, description, unit, steps, target?}]`),
+    and say in `context` what durations are normal and when slower is expected.
 - A single failure may be a `warn` as a count ("1 search failed in the last hour"); the minimum
   count applies to grading a share as `bad`.
 
@@ -155,6 +169,8 @@ two per non-`ok`-able check: "which items are stale and why", "the last N errors
   often echo part of a key: blank anything key-shaped (`sk-…`, long hex or base64, `Bearer …`)
   before it leaves. "Row limit 50" means 50 lines for a log tail.
 - `network: true` if it calls someone else's server.
+- With operations: a `timings` tool (params `operation?`, `limit?`) that returns the last runs with
+  each step's duration and units, newest first.
 
 ## 6. Level 4: `actions` (only after the user agreed)
 

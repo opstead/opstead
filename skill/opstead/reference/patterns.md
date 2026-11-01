@@ -332,6 +332,68 @@ function checkParams(spec = {}, params) {
 The manifest's `actions` entries are written next to this table (name, description, params, risk,
 limit, rollback, dry_run) so they cannot drift apart; derive one from the other when the language allows.
 
+## Speed: recording runs and steps
+
+Wrap each step; the record goes to a JSONL file or a table. The progress the app already shows users
+usually marks the same places.
+
+```js
+import { appendFile } from "node:fs/promises";
+
+export function startRun(operation, units, file = "data/runs.jsonl") {
+  const run = { operation, units, at: new Date().toISOString(), steps: [], ok: true };
+  const t0 = performance.now();
+  return {
+    /** Time one step; `units` is how many it handled (stays, products), for per-unit comparison. */
+    async step(name, units, fn) {
+      const s0 = performance.now();
+      try {
+        return await fn();
+      } catch (err) {
+        run.ok = false;
+        throw err;
+      } finally {
+        run.steps.push({ name, units, s: +((performance.now() - s0) / 1000).toFixed(3) });
+      }
+    },
+    async end(ok = run.ok) {
+      run.ok = ok;
+      run.s = +((performance.now() - t0) / 1000).toFixed(3);
+      await appendFile(file, JSON.stringify(run) + "\n").catch(() => {}); // never fail the work
+    },
+  };
+}
+```
+
+Python is the same shape with `time.perf_counter()` and a context manager per step.
+
+The `slow` check, per operation or step:
+
+```js
+const MIN_RUNS = 3, WARN_X = 2, BAD_X = 4;
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
+
+/** runs: newest first, from the store; step: undefined for the whole operation. */
+function slowCheck(runs, operation, step, now = Date.now()) {
+  const perUnit = (r) => {
+    const x = step ? r.steps.find((s) => s.name === step) : r;
+    const units = step ? x?.units : r.units;
+    return x && units ? x.s / units : null;
+  };
+  const subject = step ? `${operation}.${step}` : operation;
+  const mine = runs.filter((r) => r.operation === operation && r.ok);
+  const recent = mine.slice(0, MIN_RUNS).map(perUnit).filter((v) => v !== null);
+  const week = mine.slice(MIN_RUNS).filter((r) => now - Date.parse(r.at) < 7 * 864e5).map(perUnit).filter((v) => v !== null);
+  if (recent.length < MIN_RUNS || week.length < MIN_RUNS) return { id: "slow", subject, level: "ok", detail: `${subject}: too few runs to judge` };
+  const r = median(recent), b = median(week), x = r / b;
+  return {
+    id: "slow", subject, level: x >= BAD_X ? "bad" : x >= WARN_X ? "warn" : "ok",
+    detail: `${subject}: ${r.toFixed(2)} s per unit over the last ${MIN_RUNS} runs, usually ${b.toFixed(2)} s`,
+    data: { recent_s: r, baseline_s: b, ratio: +x.toFixed(2), runs: recent.length },
+  };
+}
+```
+
 ## Heartbeats at the end of a job
 
 Shell (cron, systemd, launchd):

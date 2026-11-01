@@ -82,6 +82,15 @@ describe("0.1 details", () => {
   });
 });
 
+describe("speed", () => {
+  it("checks declared operations and asks for a slow check", () => {
+    const { findings, errorsAt } = validateManifest({ operations: [{ name: "search", steps: ["calendar"], target: "fast" }] }, new Set(["db"]));
+    assert.equal(errorsAt[3], true);
+    assert.ok(has(findings, { level: "error", where: "manifest.operations[search].target" }));
+    assert.ok(has(findings, { level: "warn", where: "manifest.operations[search]" }));
+  });
+});
+
 describe("the spec's examples", () => {
   it("reach level 4 with no errors", async () => {
     const read = (p) => JSON.parse(readFileSync(new URL(`../../../spec/examples/${p}`, import.meta.url), "utf8"));

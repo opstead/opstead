@@ -1,4 +1,4 @@
-# The OPStead contract, version 0.1
+# The OPStead contract, version 0.2
 
 What an app serves about itself so that an operator (OPStead, or anything else that reads this) can
 watch it, place a problem in it, investigate it and, within limits the app sets, fix it.
@@ -242,6 +242,43 @@ answers `409` when it is used up.
 The app SHOULD keep its own log of actions run through the contract (who, when, params, reason,
 result), independent of the operator's.
 
+## Speed: runs, steps and `slow`
+
+From outside, the operator times only whole requests (`http_slow`). Whether a long piece of work got
+slower, and which part of it, only the app can know: it knows what one run is, how big it was and
+which steps it went through. A run's total time misleads, because runs differ in size and one slow
+step hides among fast ones.
+
+An app that does work taking more than a few seconds (a search, a sync, an import, a report) SHOULD:
+
+1. **Record each run**: the operation, its size in a unit that fits it (`combinations`, `products`,
+   `pages`), when it started, how long it took, how it ended; and for each step its name, its
+   duration, how many units it handled, how it ended. Time spent waiting on someone else's system is a
+   step of its own, so "the supplier is slow" and "our code waits too long" are told apart. Keep at
+   least 7 days or 100 runs. Most apps already know this (the progress they show users, their log
+   lines); store it instead of only printing it.
+2. **Judge it in `/ops/health`** with the check id `slow`, one per operation or step that matters
+   (`subject`: `search` or `search.calendar`). Compare the recent duration **per unit** (median of the
+   last 3 or more runs) with the app's own baseline (the median of the previous 7 days) or a declared
+   target: `warn` from 2×, `bad` from 4× or when users would notice (a deadline missed, a timeout).
+   Too few runs → `ok`, "nothing to judge". `detail` names the step and both numbers
+   ("calendar preview: 12.3 s per stay over the last 3 searches, usually 2.0 s"); `data` holds them.
+3. **Declare it in the manifest** (MAY), so the operator and its AI know what can be slow:
+
+   ```json
+   "operations": [
+     { "name": "search", "description": "One fare search over a range of dates and stays", "unit": "combinations",
+       "steps": ["calendar", "nonstop_calendar", "grid", "details"], "target": "4s" }
+   ]
+   ```
+
+   `target` is the expected duration per unit for the whole operation (optional). Say in `context`
+   what is normal ("a search with Google rate-limiting takes twice as long; that is not a fault").
+4. **Offer a tool** that returns the last runs with their steps (`timings`, params `operation?`,
+   `limit?`), so an investigator can say which step is slow and since when.
+
+`GET /ops/metrics` MAY add a histogram `<app>_step_seconds{operation, step}` for long-term trends.
+
 ## `GET /ops/metrics` (optional)
 
 Prometheus text format (`text/plain; version=0.0.4`). Counters and gauges the app already has. The
@@ -274,7 +311,7 @@ configuration how often each job should run, and opens `heartbeat_missed` when a
 
 ## Versioning
 
-This document is `0.1`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
+This document is `0.2`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
 minor version and is listed in [`CHANGES.md`](CHANGES.md). Operators ignore fields they do not know;
 apps ignore body fields they do not know.
 
