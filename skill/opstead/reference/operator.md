@@ -65,8 +65,11 @@ and the manifest's `job` fields.
 
 ## Notices and login (env file)
 
-- Channel `ntfy`: `NTFY_URL` (and `NTFY_TOKEN`, `NTFY_TOPIC_URGENT|DAILY|INFO`). Every channel whose
-  settings are present gets every notice; approvals come as buttons.
+- Notice channels; every channel whose settings are present gets every notice:
+  - `ntfy`: `NTFY_URL` (and `NTFY_TOKEN`, `NTFY_TOPIC_URGENT|DAILY|INFO`); approvals are buttons.
+  - `telegram`: `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID`; an approval button opens
+    a page that asks before it acts.
+  - `webhook`: `NOTIFY_WEBHOOK_URL` (and `NOTIFY_WEBHOOK_TOKEN`): each notice POSTed as JSON.
 - Login `OPS_LOGIN=cloudflare-access` (default) with `ACCESS_TEAM` and `ACCESS_AUD`; a missing setting
   refuses everyone. `none` only for a page nothing else can reach.
 
