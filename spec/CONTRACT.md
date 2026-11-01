@@ -267,7 +267,10 @@ An app that does work taking more than a few seconds (a search, a sync, an impor
    ] }
    ```
 
-   `units` and `s` (seconds) are numbers; a step's `units` may be in its own unit (stays, weeks).
+   `units` and `s` (seconds) are numbers; a step's `units` may be in its own unit (stays, weeks), and a
+   step may carry extra counts of known causes (`"empty": 3`). A cancelled run has `ok: false,
+   cancelled: true` and is left out of speed. Keep 7 days or the last 100 runs per operation. Bad
+   params answer 400. Split an operation whose kinds have different fixed costs (one-way and round trip).
 3. **Declare the operations** in the manifest, so the operator knows what to ask for and the AI what
    it is looking at; say in `context` what durations are normal and when slower is expected
    ("with Google rate-limiting a search takes twice as long; that is not a fault"):

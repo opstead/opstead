@@ -7,6 +7,8 @@
   (`slow`, per unit, against each operation's and step's own baseline) and its AI reads the runs.
   Added after a search that took 5 minutes because one step waited 25 s for each stay with no prices,
   while the outside services answered in milliseconds. Additive: a 0.1 app is a valid 0.2 app.
+  (A first draft of 0.2, on the repo for a few hours and never released, had apps judge `slow`
+  themselves and offer a `timings` tool; apps built on it should drop both.)
 
 ## 0.1 (2026-11-01)
 

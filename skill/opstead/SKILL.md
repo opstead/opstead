@@ -120,7 +120,7 @@ Rules (the ledger depends on them):
 
 ## 4. Level 2: `components` in `GET /ops/manifest`
 
-Manifest: `{ app, contract: "0.1", version, components, context, tools, actions }`.
+Manifest: `{ app, contract: "0.2", version, components, context, tools, actions, operations? }`.
 
 One component per part found in step 1:
 
@@ -177,6 +177,14 @@ For each operation that takes more than a few seconds (step 1):
   and say in `context` what durations are normal and when slower is expected.
 - Do not compute "slow" in the app: the operator compares each operation and step per unit with its
   own baseline, and its AI reads the runs.
+- Split an operation when its kinds have different fixed costs (a one-way and a round-trip search):
+  time per unit only compares runs whose fixed part is alike.
+- A step may carry extra counts of known causes (`"empty": 3` stays with no prices): they explain a
+  slow step better than splitting it further.
+- A cancelled run is recorded with `ok: false, cancelled: true` (the operator leaves it out of speed),
+  or not at all. Bad params on `/ops/runs` answer 400. Keep 7 days or the last 100 runs **per operation**.
+- A wait that decides "there is no data" (a page that stays blank) must be longer than the source's
+  normal loading time: measure it on real runs before choosing it, or empty results turn into false ones.
 
 ## 6. Level 4: `actions` (only after the user agreed)
 
