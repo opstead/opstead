@@ -158,14 +158,13 @@ export function validateManifest(body, healthIds) {
   }
   for (const c of Array.isArray(comps) ? comps : []) if (isObj(c) && isStr(c.id) && c.description !== undefined && !isStr(c.description)) add(3, "error", `manifest.components[${c.id}].description`, "must be a string");
   if (m.operations !== undefined) {
-    if (!Array.isArray(m.operations)) add(3, "error", "manifest.operations", "must be an array of {name, description?, unit?, steps?, target?}");
+    if (!Array.isArray(m.operations)) add(3, "error", "manifest.operations", "must be an array of {name, description?, unit?, steps?}");
     else m.operations.forEach((o, i) => {
       if (!isObj(o) || !isStr(o.name)) return add(3, "error", `manifest.operations[${i}]`, "needs a name");
       const at = `manifest.operations[${o.name}]`;
-      if (!ID.test(o.name)) add(3, "warn", `${at}.name`, "use snake_case (it is the subject of its slow check)");
-      if (o.steps !== undefined && !(Array.isArray(o.steps) && o.steps.every(isStr))) add(3, "error", `${at}.steps`, "must be an array of step names");
-      if (o.target !== undefined && !(typeof o.target === "string" && DURATION.test(o.target))) add(3, "error", `${at}.target`, 'must be a duration per unit like "4s"');
-      if (!healthIds.has("slow")) add(3, "warn", at, "declared, but /ops/health reports no slow check: judge it there (subject: the operation or operation.step)");
+      if (!ID.test(o.name)) add(3, "warn", `${at}.name`, "use snake_case (it is the subject of the operator's slow check)");
+      if (!isStr(o.unit)) add(3, "warn", `${at}.unit`, "missing: what one unit of size is (combinations, products), so runs of different sizes compare");
+      if (o.steps !== undefined && !(Array.isArray(o.steps) && o.steps.every((x) => isObj(x) && isStr(x.name)))) add(3, "error", `${at}.steps`, "must be an array of {name, unit?}");
     });
   }
 
@@ -194,6 +193,21 @@ export function validateManifest(body, healthIds) {
     });
   }
   return { findings: out, has, errorsAt };
+}
+
+/**
+ * @param {unknown} body a /ops/runs reply
+ * @returns {string | null} what is wrong with it
+ */
+export function validateRuns(body) {
+  if (!isObj(body) || !Array.isArray(/** @type {any} */ (body).runs)) return "/ops/runs must answer {runs: [...]}";
+  for (const r of /** @type {any} */ (body).runs) {
+    if (!isObj(r) || !isStr(r.operation) || !isStr(r.at) || typeof r.units !== "number" || typeof r.s !== "number" || typeof r.ok !== "boolean")
+      return "each run needs operation, at, units (a number), s (seconds), ok";
+    if (r.steps !== undefined && !(Array.isArray(r.steps) && r.steps.every((x) => isObj(x) && isStr(x.name) && typeof x.s === "number")))
+      return `run ${r.id ?? r.at}: steps must be [{name, units?, s, ok?}]`;
+  }
+  return null;
 }
 
 /**
@@ -249,6 +263,14 @@ export async function checkApp(url, opts = {}) {
   if (manifest !== undefined) {
     const m = validateManifest(manifest, h.ids);
     findings.push(...m.findings);
+    if (isObj(manifest) && Array.isArray(manifest.operations) && manifest.operations.length) {
+      const runs = await get("/ops/runs?limit=5").then(async (r) => (r.ok ? r.json().catch(() => null) : r.status), () => 0);
+      const bad = validateRuns(runs);
+      if (typeof runs === "number") { m.findings.push({ level: "error", where: "runs", message: `operations are declared but /ops/runs answered ${runs || "nothing"}` }); m.errorsAt[3] = true; }
+      else if (bad) { m.findings.push({ level: "error", where: "runs", message: bad }); m.errorsAt[3] = true; }
+      else m.findings.push({ level: "ok", where: "runs", message: `/ops/runs answers (${runs.runs.length} recent)` });
+      findings.push(m.findings.at(-1));
+    }
     if (level >= 1 && m.has.components && !m.errorsAt[2]) level = 2;
     if (level >= 2 && m.has.knowledge && !m.errorsAt[3]) level = 3;
     if (level >= 3 && m.has.actions && !m.errorsAt[4]) level = 4;

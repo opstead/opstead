@@ -83,18 +83,24 @@ describe("0.1 details", () => {
 });
 
 describe("speed", () => {
-  it("checks declared operations and asks for a slow check", () => {
-    const { findings, errorsAt } = validateManifest({ operations: [{ name: "search", steps: ["calendar"], target: "fast" }] }, new Set(["db"]));
+  it("checks declared operations and fetches /ops/runs", async () => {
+    const { findings, errorsAt } = validateManifest({ operations: [{ name: "search", steps: ["calendar"] }] }, new Set());
     assert.equal(errorsAt[3], true);
-    assert.ok(has(findings, { level: "error", where: "manifest.operations[search].target" }));
-    assert.ok(has(findings, { level: "warn", where: "manifest.operations[search]" }));
+    assert.ok(has(findings, { level: "error", where: "manifest.operations[search].steps" }));
+    const m = { ...manifest, operations: [{ name: "search", unit: "combinations", steps: [{ name: "calendar", unit: "stays" }] }] };
+    const missing = await checkApp("https://shop.example", { token: "t", fetch: app({ "/ops/health": health, "/ops/manifest": m }) });
+    assert.ok(has(missing.findings, { level: "error", where: "runs" }));
+    assert.equal(missing.level, 2);
+    const runs = { runs: [{ operation: "search", at: "2026-11-01T12:00:00Z", units: 88, s: 313, ok: true, steps: [{ name: "calendar", units: 8, s: 98 }] }] };
+    const fine = await checkApp("https://shop.example", { token: "t", fetch: app({ "/ops/health": health, "/ops/manifest": m, "/ops/runs": runs }) });
+    assert.equal(fine.level, 4);
   });
 });
 
 describe("the spec's examples", () => {
   it("reach level 4 with no errors", async () => {
     const read = (p) => JSON.parse(readFileSync(new URL(`../../../spec/examples/${p}`, import.meta.url), "utf8"));
-    const r = await checkApp("https://shop.example", { token: "t", fetch: app({ "/ops/health": read("health.json"), "/ops/manifest": read("manifest.json") }) });
+    const r = await checkApp("https://shop.example", { token: "t", fetch: app({ "/ops/health": read("health.json"), "/ops/manifest": read("manifest.json"), "/ops/runs": read("runs.json") }) });
     assert.deepEqual(r.findings.filter((f) => f.level === "error"), []);
     assert.equal(r.level, 4);
   });

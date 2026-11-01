@@ -19,7 +19,7 @@ only when every level below it holds. `opstead check <url>` reports the level an
 |---|---|---|
 | 1 health | `GET /ops/health` | open one problem per thing that is wrong and tell the owner once per change |
 | 2 shape | `components` in `GET /ops/manifest` | draw the app and say which part is failing |
-| 3 knowledge | `context` and `tools` in the manifest, `GET /ops/tools/<name>` | let an AI investigate with the app's own data, knowing what is normal |
+| 3 knowledge | `context` and `tools` in the manifest, `GET /ops/tools/<name>`; `operations` and `GET /ops/runs` for long work | let an AI investigate with the app's own data, knowing what is normal; tell when work got slower and which step |
 | 4 hands | `actions` in the manifest, `POST /ops/actions/<name>` | propose fixes; run the ones the policy allows; verify they worked |
 
 `GET /ops/metrics` is optional at every level.
@@ -242,40 +242,47 @@ answers `409` when it is used up.
 The app SHOULD keep its own log of actions run through the contract (who, when, params, reason,
 result), independent of the operator's.
 
-## Speed: runs, steps and `slow`
+## Speed: `GET /ops/runs`
 
 From outside, the operator times only whole requests (`http_slow`). Whether a long piece of work got
-slower, and which part of it, only the app can know: it knows what one run is, how big it was and
-which steps it went through. A run's total time misleads, because runs differ in size and one slow
-step hides among fast ones.
+slower, and which part of it, needs facts only the app has: what one run is, how big it was, which
+steps it went through. The app **reports** those facts; the **operator judges** them (the same rule for
+every app, its thresholds in one place) and gives them to its AI. A run's total misleads, because runs
+differ in size and one slow step hides among fast ones.
 
 An app that does work taking more than a few seconds (a search, a sync, an import, a report) SHOULD:
 
 1. **Record each run**: the operation, its size in a unit that fits it (`combinations`, `products`,
-   `pages`), when it started, how long it took, how it ended; and for each step its name, its
-   duration, how many units it handled, how it ended. Time spent waiting on someone else's system is a
-   step of its own, so "the supplier is slow" and "our code waits too long" are told apart. Keep at
-   least 7 days or 100 runs. Most apps already know this (the progress they show users, their log
-   lines); store it instead of only printing it.
-2. **Judge it in `/ops/health`** with the check id `slow`, one per operation or step that matters
-   (`subject`: `search` or `search.calendar`). Compare the recent duration **per unit** (median of the
-   last 3 or more runs) with the app's own baseline (the median of the previous 7 days) or a declared
-   target: `warn` from 2×, `bad` from 4× or when users would notice (a deadline missed, a timeout).
-   Too few runs → `ok`, "nothing to judge". `detail` names the step and both numbers
-   ("calendar preview: 12.3 s per stay over the last 3 searches, usually 2.0 s"); `data` holds them.
-3. **Declare it in the manifest** (MAY), so the operator and its AI know what can be slow:
+   `pages`), when it started, how long it took, how it ended; and for each step its name, its duration,
+   how many units it handled, how it ended. Time spent waiting on someone else's system is a step of
+   its own, so "the supplier is slow" and "our code waits too long" are told apart. Keep at least 7
+   days or 100 runs. Most apps already know this (the progress they show users, their log lines);
+   store it instead of only printing it. Durations and counts only: never what a user asked for.
+2. **Serve them** at `GET /ops/runs?operation=&since=&limit=` (newest first, at most 100):
+
+   ```json
+   { "runs": [
+     { "operation": "search", "id": "r_812", "at": "2026-11-01T12:00:00Z", "units": 88, "s": 313.2, "ok": true,
+       "steps": [ { "name": "calendar", "units": 8, "s": 98.1, "ok": true }, { "name": "grid", "units": 4, "s": 120.4, "ok": true } ] }
+   ] }
+   ```
+
+   `units` and `s` (seconds) are numbers; a step's `units` may be in its own unit (stays, weeks).
+3. **Declare the operations** in the manifest, so the operator knows what to ask for and the AI what
+   it is looking at; say in `context` what durations are normal and when slower is expected
+   ("with Google rate-limiting a search takes twice as long; that is not a fault"):
 
    ```json
    "operations": [
      { "name": "search", "description": "One fare search over a range of dates and stays", "unit": "combinations",
-       "steps": ["calendar", "nonstop_calendar", "grid", "details"], "target": "4s" }
+       "steps": [ { "name": "calendar", "unit": "stays" }, { "name": "grid", "unit": "weeks" } ] }
    ]
    ```
 
-   `target` is the expected duration per unit for the whole operation (optional). Say in `context`
-   what is normal ("a search with Google rate-limiting takes twice as long; that is not a fault").
-4. **Offer a tool** that returns the last runs with their steps (`timings`, params `operation?`,
-   `limit?`), so an investigator can say which step is slow and since when.
+The operator then opens `slow` (subject `search` or `search.calendar`) when the recent duration per
+unit is well above that operation's or step's own baseline, and its AI reads `/ops/runs` when it
+investigates. An app does not report `slow` itself, with one exception: a hard limit its users feel
+(a search hitting the page's timeout) is the app's own check, under its own id.
 
 `GET /ops/metrics` MAY add a histogram `<app>_step_seconds{operation, step}` for long-term trends.
 

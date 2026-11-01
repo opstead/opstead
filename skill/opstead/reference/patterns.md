@@ -367,32 +367,28 @@ export function startRun(operation, units, file = "data/runs.jsonl") {
 
 Python is the same shape with `time.perf_counter()` and a context manager per step.
 
-The `slow` check, per operation or step:
+Serving them (newest first, filtered, capped):
 
 ```js
-const MIN_RUNS = 3, WARN_X = 2, BAD_X = 4;
-const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : NaN; };
+import { readFile } from "node:fs/promises";
 
-/** runs: newest first, from the store; step: undefined for the whole operation. */
-function slowCheck(runs, operation, step, now = Date.now()) {
-  const perUnit = (r) => {
-    const x = step ? r.steps.find((s) => s.name === step) : r;
-    const units = step ? x?.units : r.units;
-    return x && units ? x.s / units : null;
-  };
-  const subject = step ? `${operation}.${step}` : operation;
-  const mine = runs.filter((r) => r.operation === operation && r.ok);
-  const recent = mine.slice(0, MIN_RUNS).map(perUnit).filter((v) => v !== null);
-  const week = mine.slice(MIN_RUNS).filter((r) => now - Date.parse(r.at) < 7 * 864e5).map(perUnit).filter((v) => v !== null);
-  if (recent.length < MIN_RUNS || week.length < MIN_RUNS) return { id: "slow", subject, level: "ok", detail: `${subject}: too few runs to judge` };
-  const r = median(recent), b = median(week), x = r / b;
-  return {
-    id: "slow", subject, level: x >= BAD_X ? "bad" : x >= WARN_X ? "warn" : "ok",
-    detail: `${subject}: ${r.toFixed(2)} s per unit over the last ${MIN_RUNS} runs, usually ${b.toFixed(2)} s`,
-    data: { recent_s: r, baseline_s: b, ratio: +x.toFixed(2), runs: recent.length },
-  };
+export async function runsRoute(query, file = "data/runs.jsonl") {
+  const limit = Math.min(Number.parseInt(query.limit ?? "50", 10) || 50, 100);
+  const since = query.since ? Date.parse(query.since) : 0;
+  const lines = (await readFile(file, "utf8").catch(() => "")).split("\n").filter(Boolean);
+  const runs = [];
+  for (let i = lines.length - 1; i >= 0 && runs.length < limit; i--) {
+    let r;
+    try { r = JSON.parse(lines[i]); } catch { continue; }
+    if (query.operation && r.operation !== query.operation) continue;
+    if (Date.parse(r.at) < since) break;
+    runs.push(r);
+  }
+  return { runs };
 }
 ```
+
+Trim the file on start or once a day to 7 days or the last 100 runs per operation, whichever keeps more.
 
 ## Heartbeats at the end of a job
 

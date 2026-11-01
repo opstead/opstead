@@ -251,13 +251,20 @@
         "steps": {
           "type": "array",
           "items": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_]*$"
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "unit": {
+                "type": "string"
+              }
+            }
           }
-        },
-        "target": {
-          "type": "string",
-          "pattern": "^\\d+(\\.\\d+)?\\s*(ms|s|m|h|d)$"
         }
       }
     }

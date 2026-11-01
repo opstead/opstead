@@ -24,4 +24,5 @@ export declare function validateManifest(
   body: unknown,
   healthIds: Set<string>,
 ): { findings: Finding[]; has: { components: boolean; knowledge: boolean; actions: boolean }; errorsAt: { 2: boolean; 3: boolean; 4: boolean } };
+export declare function validateRuns(body: unknown): string | null;
 export declare function checkApp(url: string, opts?: { token?: string; fetch?: typeof fetch; timeoutMs?: number }): Promise<Report>;

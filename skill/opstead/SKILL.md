@@ -112,17 +112,9 @@ Rules (the ledger depends on them):
 - **Started on demand** (a headless browser, a worker pool, a model loaded when asked): absent while
   nothing needs it is the design, so `ok` with a detail that says so; `bad` only when work is waiting
   for it and it is not there.
-- **Speed** (contract section "Speed"), for each long operation found in step 1:
-  - Record every run and its steps in the app's own store (a table or a JSONL file; see
-    `reference/patterns.md`): operation, size in units, start, duration, outcome; per step: name,
-    duration, units, outcome. Waiting on an outside system is its own step. Keep 7 days or 100 runs.
-  - Add `slow` with `subject` = the operation, and one per step that can drag on its own
-    (`search.calendar`). Compare the median duration **per unit** of the last 3+ runs with the median
-    of the previous 7 days (or a target the code states): `warn` from 2×, `bad` from 4×. Fewer than 3
-    runs, or a baseline not built yet → `ok`, nothing to judge. Never compare raw totals of runs of
-    different sizes.
-  - Declare the operations in the manifest (`operations: [{name, description, unit, steps, target?}]`),
-    and say in `context` what durations are normal and when slower is expected.
+- **Speed is not judged here.** For the long operations found in step 1, the app records and serves
+  facts (step 5, `/ops/runs`); the operator decides what is slow. Write a check about duration only
+  for a hard limit users feel (a request hitting the page's timeout), under its own id.
 - A single failure may be a `warn` as a count ("1 search failed in the last hour"); the minimum
   count applies to grading a share as `bad`.
 
@@ -169,8 +161,22 @@ two per non-`ok`-able check: "which items are stale and why", "the last N errors
   often echo part of a key: blank anything key-shaped (`sk-…`, long hex or base64, `Bearer …`)
   before it leaves. "Row limit 50" means 50 lines for a log tail.
 - `network: true` if it calls someone else's server.
-- With operations: a `timings` tool (params `operation?`, `limit?`) that returns the last runs with
-  each step's duration and units, newest first.
+
+### Long work: `operations` and `GET /ops/runs`
+
+For each operation that takes more than a few seconds (step 1):
+
+- Record every run and its steps in the app's own store (a table or a JSONL file; see
+  `reference/patterns.md`): operation, size in units, start, seconds, ok; per step: name, units,
+  seconds, ok. Mark steps where the progress shown to users already changes. Waiting on an outside
+  system is its own step. Keep 7 days or 100 runs. **Durations and counts only**, never what a user
+  asked for (routes, dates, queries).
+- Serve them at `GET /ops/runs?operation=&since=&limit=`, newest first, at most 100, shaped as in the
+  contract (`{ "runs": [ { operation, id, at, units, s, ok, steps: [ { name, units, s, ok } ] } ] }`).
+- Declare them in the manifest: `operations: [{ name, description, unit, steps: [{ name, unit }] }]`,
+  and say in `context` what durations are normal and when slower is expected.
+- Do not compute "slow" in the app: the operator compares each operation and step per unit with its
+  own baseline, and its AI reads the runs.
 
 ## 6. Level 4: `actions` (only after the user agreed)
 

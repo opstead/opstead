@@ -1,0 +1,48 @@
+{
+  "runs": [
+    {
+      "operation": "sync",
+      "id": "r_2041",
+      "at": "2026-11-01T12:00:00Z",
+      "units": 420,
+      "s": 88.4,
+      "ok": true,
+      "steps": [
+        {
+          "name": "fetch",
+          "units": 420,
+          "s": 81.2,
+          "ok": true
+        },
+        {
+          "name": "save",
+          "units": 420,
+          "s": 7.2,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "operation": "sync",
+      "id": "r_2040",
+      "at": "2026-11-01T11:00:00Z",
+      "units": 418,
+      "s": 84.9,
+      "ok": true,
+      "steps": [
+        {
+          "name": "fetch",
+          "units": 418,
+          "s": 78.0,
+          "ok": true
+        },
+        {
+          "name": "save",
+          "units": 418,
+          "s": 6.9,
+          "ok": true
+        }
+      ]
+    }
+  ]
+}

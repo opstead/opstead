@@ -18,18 +18,6 @@
         "stale": 713,
         "total": 1370
       }
-    },
-    {
-      "id": "slow",
-      "level": "ok",
-      "subject": "sync",
-      "detail": "price sync: 0.21 s per product over the last 3 runs, usually 0.19 s",
-      "data": {
-        "recent_s": 0.21,
-        "baseline_s": 0.19,
-        "unit": "products",
-        "runs": 3
-      }
     }
   ]
 }

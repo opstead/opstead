@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/runs.schema.json",
+  "title": "GET /ops/runs",
+  "description": "The app's recorded runs of long operations, newest first (OPStead contract 0.2, speed). Durations and counts only.",
+  "type": "object",
+  "required": [
+    "runs"
+  ],
+  "properties": {
+    "runs": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/definitions/run"
+      }
+    }
+  },
+  "definitions": {
+    "run": {
+      "type": "object",
+      "required": [
+        "operation",
+        "at",
+        "units",
+        "s",
+        "ok"
+      ],
+      "properties": {
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "id": {
+          "type": "string"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "units": {
+          "type": "number",
+          "minimum": 0
+        },
+        "s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "ok": {
+          "type": "boolean"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "s"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "units": {
+                "type": "number",
+                "minimum": 0
+              },
+              "s": {
+                "type": "number",
+                "minimum": 0
+              },
+              "ok": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

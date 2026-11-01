@@ -8,14 +8,14 @@ import addFormats from "ajv-formats";
 const read = (p) => JSON.parse(readFileSync(new URL(`../${p}`, import.meta.url), "utf8"));
 const ajv = new Ajv({ allErrors: true, strict: false });
 addFormats(ajv);
-const schema = Object.fromEntries(["health", "manifest", "action-reply"].map((n) => [n, ajv.compile(read(`schema/${n}.schema.json`))]));
+const schema = Object.fromEntries(["health", "manifest", "action-reply", "runs"].map((n) => [n, ajv.compile(read(`schema/${n}.schema.json`))]));
 const valid = (s, body) => {
   const ok = schema[s](body);
   return ok ? true : JSON.stringify(schema[s].errors);
 };
 
 it("the examples pass", () => {
-  for (const [s, e] of [["health", "health"], ["manifest", "manifest"], ["action-reply", "action-done"], ["action-reply", "action-dry-run"], ["action-reply", "action-refused"]]) {
+  for (const [s, e] of [["health", "health"], ["manifest", "manifest"], ["action-reply", "action-done"], ["action-reply", "action-dry-run"], ["action-reply", "action-refused"], ["runs", "runs"]]) {
     assert.equal(valid(s, read(`examples/${e}.json`)), true, e);
   }
 });
@@ -29,4 +29,5 @@ it("the usual mistakes fail", () => {
   assert.notEqual(valid("manifest", { components: [{ id: "s", kind: "ui", probe: true }] }), true, "a probe without a url");
   assert.notEqual(valid("manifest", { components: [{ id: "s", kind: "server" }] }), true, "an unknown kind");
   assert.notEqual(valid("action-reply", { error: "x", result: "y" }), true, "an error that also claims a result");
+  assert.notEqual(valid("runs", { runs: [{ operation: "search", at: "2026-11-01T12:00:00Z", units: "88", s: 3, ok: true }] }), true, "units as a string");
 });

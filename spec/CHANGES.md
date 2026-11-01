@@ -2,11 +2,11 @@
 
 ## 0.2 (2026-11-01)
 
-- **Speed**: apps with long work record each run and its steps, judge them with the check `slow`
-  (per unit, against their own baseline), may declare `operations` in the manifest, and offer a
-  `timings` tool. Added after a search that took 5 minutes because one step waited 25 s for each
-  stay with no prices, while the outside services answered in milliseconds. Additive: a 0.1 app is
-  a valid 0.2 app.
+- **Speed**: apps with long work record each run and its steps (size in units, durations) and serve
+  them at `GET /ops/runs`; they declare `operations` in the manifest. The operator judges slowness
+  (`slow`, per unit, against each operation's and step's own baseline) and its AI reads the runs.
+  Added after a search that took 5 minutes because one step waited 25 s for each stay with no prices,
+  while the outside services answered in milliseconds. Additive: a 0.1 app is a valid 0.2 app.
 
 ## 0.1 (2026-11-01)
 

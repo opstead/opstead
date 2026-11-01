@@ -36,10 +36,6 @@
       "checks": [
         {
           "id": "stale"
-        },
-        {
-          "id": "slow",
-          "subject": "sync"
         }
       ]
     },
@@ -96,18 +92,6 @@
         }
       },
       "network": true
-    },
-    {
-      "name": "timings",
-      "description": "The last runs of an operation with each step's duration and units, newest first",
-      "params": {
-        "operation": {
-          "type": "string"
-        },
-        "limit": {
-          "type": "integer"
-        }
-      }
     }
   ],
   "actions": [
@@ -171,10 +155,15 @@
       "description": "One price sync for one supplier",
       "unit": "products",
       "steps": [
-        "fetch",
-        "save"
-      ],
-      "target": "300ms"
+        {
+          "name": "fetch",
+          "unit": "products"
+        },
+        {
+          "name": "save",
+          "unit": "products"
+        }
+      ]
     }
   ]
 }
