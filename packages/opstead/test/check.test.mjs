@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { checkApp, validateHealth, validateManifest } from "../lib/check.mjs";
 
@@ -68,5 +69,14 @@ describe("opstead check", () => {
     assert.equal(errorsAt[4], true);
     const where = findings.map((f) => f.where);
     for (const want of ["manifest.actions[go].risk", "manifest.actions[go].rollback", "manifest.actions[go].limit"]) assert.ok(where.includes(want), want);
+  });
+});
+
+describe("the spec's examples", () => {
+  it("reach level 4 with no errors", async () => {
+    const read = (p) => JSON.parse(readFileSync(new URL(`../../../spec/examples/${p}`, import.meta.url), "utf8"));
+    const r = await checkApp("https://shop.example", { token: "t", fetch: app({ "/ops/health": read("health.json"), "/ops/manifest": read("manifest.json") }) });
+    assert.deepEqual(r.findings.filter((f) => f.level === "error"), []);
+    assert.equal(r.level, 4);
   });
 });

@@ -119,8 +119,8 @@ export function validateManifest(body, healthIds) {
         else if (!healthIds.has(k.id) && !OPERATOR_CHECKS.includes(k.id)) unseen.add(k.id);
       }
       // An external that stands for another of the owner's apps is watched there.
-      const watched = (Array.isArray(c.checks) && c.checks.length) || c.launchd || c.job || (c.probe && c.url) || isStr(c.app);
-      if (!watched && c.kind !== "store") add(2, "warn", at, "nothing watches it: no checks, launchd, job or probe; it shows as not watched");
+      const watched = (Array.isArray(c.checks) && c.checks.length) || c.service || c.launchd || c.job || (c.probe && c.url) || isStr(c.app);
+      if (!watched && c.kind !== "store") add(2, "warn", at, "nothing watches it: no checks, service, job or probe; it shows as not watched");
       if (c.probe && !isStr(c.url)) add(2, "error", `${at}.probe`, "needs a url to open");
       if (c.url !== undefined && !isStr(c.url)) add(2, "error", `${at}.url`, "must be a URL");
     });
@@ -219,7 +219,7 @@ export async function checkApp(url, opts = {}) {
   } else findings.push({ level: "warn", where: "auth", message: "/ops/health answered without a token: put /ops/* behind one (OPS_TOKEN)" });
 
   const metrics = await get("/ops/metrics").then((r) => r.ok, () => false);
-  findings.push(metrics ? { level: "ok", where: "metrics", message: "/ops/metrics answers" } : { level: "warn", where: "metrics", message: "/ops/metrics does not answer (optional: Prometheus text)" });
+  findings.push(metrics ? { level: "ok", where: "metrics", message: "/ops/metrics answers" } : { level: "ok", where: "metrics", message: "/ops/metrics not served (optional, needed for no level)" });
 
   let manifest;
   try {

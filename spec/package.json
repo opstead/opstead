@@ -1,0 +1,13 @@
+{
+  "name": "@opstead/spec",
+  "private": true,
+  "description": "The OPStead contract: spec, JSON Schemas and examples",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}

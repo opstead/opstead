@@ -1,0 +1,230 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/manifest.schema.json",
+  "title": "GET /ops/manifest",
+  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.1, levels 2-4). Cross-references (depends_on ids, rollback names) are checked by `opstead check`, not by this schema.",
+  "type": "object",
+  "properties": {
+    "app": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/component"
+      }
+    },
+    "context": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/tool"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/action"
+      }
+    }
+  },
+  "definitions": {
+    "param": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "uuid"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/definitions/param"
+      }
+    },
+    "component": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "kind": {
+          "enum": [
+            "service",
+            "job",
+            "store",
+            "external",
+            "ui"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "subject": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "probe": {
+          "type": "boolean"
+        },
+        "service": {
+          "type": "string"
+        },
+        "launchd": {
+          "type": "string"
+        },
+        "job": {
+          "type": "string"
+        },
+        "app": {
+          "type": "string"
+        },
+        "group": {
+          "type": "string"
+        }
+      },
+      "if": {
+        "properties": {
+          "probe": {
+            "const": true
+          }
+        },
+        "required": [
+          "probe"
+        ]
+      },
+      "then": {
+        "required": [
+          "url"
+        ]
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "description"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "$ref": "#/definitions/params"
+        },
+        "network": {
+          "type": "boolean"
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "name",
+        "description",
+        "risk"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "params": {
+          "$ref": "#/definitions/params"
+        },
+        "risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "limit": {
+          "type": "string",
+          "pattern": "^\\d+\\s*/\\s*\\d+\\s*(ms|s|m|h|d)$"
+        },
+        "rollback": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "schedule": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?\\s*(ms|s|m|h|d)$"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/action-reply.schema.json",
+  "title": "POST /ops/actions/<name> reply",
+  "description": "200 with result (and maybe verify), 200 with dry_run + would, or an error status with error (409 when a precondition does not hold).",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "result"
+      ],
+      "properties": {
+        "result": {
+          "type": "string"
+        },
+        "verify": {
+          "type": "object",
+          "required": [
+            "check",
+            "after"
+          ],
+          "properties": {
+            "check": {
+              "type": "string"
+            },
+            "subject": {
+              "type": "string"
+            },
+            "after": {
+              "type": "string",
+              "pattern": "^\\d+(\\.\\d+)?\\s*(ms|s|m|h|d)$"
+            }
+          }
+        }
+      },
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "dry_run",
+        "would"
+      ],
+      "properties": {
+        "dry_run": {
+          "const": true
+        },
+        "would": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    {
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "result"
+            ]
+          },
+          {
+            "required": [
+              "would"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

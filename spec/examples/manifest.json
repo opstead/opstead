@@ -1,0 +1,152 @@
+{
+  "app": "shop",
+  "contract": "0.1",
+  "version": "3c49e78",
+  "context": "Sells garden tools in Canada. Every hour the price sync pulls from three suppliers; Supplier A answers 403 for a few minutes after midnight UTC while it rebuilds, which is normal. Orders are low on weekends.",
+  "components": [
+    {
+      "id": "api",
+      "name": "API",
+      "kind": "service",
+      "service": "shop-api",
+      "depends_on": [
+        "db",
+        "payments"
+      ],
+      "checks": [
+        {
+          "id": "db"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "name": "Postgres",
+      "kind": "store"
+    },
+    {
+      "id": "sync",
+      "name": "price sync (hourly)",
+      "kind": "job",
+      "job": "sync",
+      "depends_on": [
+        "db",
+        "supplier_a"
+      ],
+      "checks": [
+        {
+          "id": "stale"
+        }
+      ]
+    },
+    {
+      "id": "supplier_a",
+      "name": "Supplier A",
+      "kind": "external",
+      "url": "https://supplier-a.example",
+      "checks": [
+        {
+          "id": "stale",
+          "subject": "supplier-a"
+        }
+      ]
+    },
+    {
+      "id": "payments",
+      "name": "Payments",
+      "kind": "external",
+      "group": "Providers"
+    },
+    {
+      "id": "site",
+      "name": "the shop",
+      "kind": "ui",
+      "url": "https://shop.example",
+      "probe": true,
+      "depends_on": [
+        "api"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "name": "stale_products",
+      "description": "Products not updated in 24 h, oldest first, with their supplier and last error",
+      "params": {
+        "supplier": {
+          "type": "string",
+          "description": "only this supplier"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      }
+    },
+    {
+      "name": "supplier_status",
+      "description": "Asks Supplier A's API whether a product exists",
+      "params": {
+        "sku": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "network": true
+    }
+  ],
+  "actions": [
+    {
+      "name": "retry_sync",
+      "description": "Runs the price sync for one supplier now",
+      "params": {
+        "supplier": {
+          "type": "string",
+          "required": true
+        }
+      },
+      "risk": "low",
+      "limit": "1/45m",
+      "rollback": null,
+      "dry_run": true
+    },
+    {
+      "name": "hide_product",
+      "description": "Hides a product whose supplier page is gone",
+      "params": {
+        "product_id": {
+          "type": "uuid",
+          "required": true
+        }
+      },
+      "risk": "medium",
+      "limit": "30/1d",
+      "rollback": "show_product",
+      "dry_run": true
+    },
+    {
+      "name": "show_product",
+      "description": "Shows a hidden product again",
+      "params": {
+        "product_id": {
+          "type": "uuid",
+          "required": true
+        }
+      },
+      "risk": "low",
+      "limit": "30/1d"
+    },
+    {
+      "name": "sweep_stale",
+      "description": "Retries every product stale for more than a day, at most `limit` of them",
+      "params": {
+        "limit": {
+          "type": "integer"
+        }
+      },
+      "risk": "low",
+      "limit": "2/1d",
+      "dry_run": true,
+      "schedule": "1d"
+    }
+  ]
+}

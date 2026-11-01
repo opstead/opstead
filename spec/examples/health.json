@@ -1,0 +1,23 @@
+{
+  "app": "shop",
+  "version": "3c49e78",
+  "at": "2026-11-01T12:00:00Z",
+  "status": "warn",
+  "checks": [
+    {
+      "id": "db",
+      "level": "ok",
+      "detail": "Postgres answered in 3 ms"
+    },
+    {
+      "id": "stale",
+      "level": "warn",
+      "subject": "supplier-a",
+      "detail": "713 of 1370 products not updated in 24 h",
+      "data": {
+        "stale": 713,
+        "total": 1370
+      }
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "result": "hidden",
+  "verify": {
+    "check": "stale",
+    "subject": "supplier-a",
+    "after": "40m"
+  }
+}
