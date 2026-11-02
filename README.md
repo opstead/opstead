@@ -54,4 +54,5 @@ The app stays in charge: it declares what may be done, and re-checks its own pre
 
 ## Licence
 
-MIT.
+The contract, the skill and the `opstead` package are MIT: an app that serves the contract owes
+nothing to anyone. The operator (the server that watches the apps) will be AGPL-3.0 when it is published.
