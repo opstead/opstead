@@ -41,6 +41,8 @@ and the manifest's `job` fields.
 - `os` picks the host plugin: `macos` (services are launchd labels, asked directly on the machine
   the operator runs on), `linux` (systemd units, read from node_exporter's systemd collector: run it
   with `--collector.systemd`). Another OS needs a new host plugin; say so instead of guessing.
+- A container is `docker:<container>` in `services`, on any OS; it is asked of Docker (`DOCKER_HOST`,
+  the local socket by default) on the machine the operator runs on only.
 - `exporter`: node_exporter, reachable from the operator's machine. Without it only what the machine
   serves itself can be watched.
 - `network` picks the private-network plugin (`tailscale`): up, and every other machine reachable.
@@ -70,8 +72,17 @@ and the manifest's `job` fields.
   - `telegram`: `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_CHAT_ID`; an approval button opens
     a page that asks before it acts.
   - `webhook`: `NOTIFY_WEBHOOK_URL` (and `NOTIFY_WEBHOOK_TOKEN`): each notice POSTed as JSON.
-- Login `OPS_LOGIN=cloudflare-access` (default) with `ACCESS_TEAM` and `ACCESS_AUD`; a missing setting
-  refuses everyone. `none` only for a page nothing else can reach.
+- Login, by `OPS_LOGIN`; a missing setting refuses everyone:
+  - `cloudflare-access` (the default): `ACCESS_TEAM` and `ACCESS_AUD`.
+  - `header`: a sign-in proxy in front (Authelia, oauth2-proxy, Authentik, Tailscale serve, Caddy or
+    Traefik forward auth) passes the user in `LOGIN_HEADER` (default `Remote-User`); believed only from
+    the addresses in `LOGIN_TRUSTED` (the proxy's, or a range like `172.16.0.0/12`), and only for the
+    names in `LOGIN_ALLOW` when that is set.
+  - `password`: one owner, no proxy: `OPS_PASSWORD_HASH` from `npm run password` (the password itself
+    is never stored). A session lasts 30 days; changing the password ends every session.
+  - `none`: only for a page nothing else can reach.
+  Ask the owner which they have; never choose `none` for a page others can reach, and never put a
+  password in the env file, only the hash, which the owner makes with `npm run password`.
 
 ## After the change
 
