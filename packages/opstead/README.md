@@ -24,6 +24,16 @@ Next: Declare actions with risk, limit, rollback, dry_run, and serve POST /ops/a
 `--json` gives the same report for agents. The exit code is 0 when nothing is wrong, 1 when
 something is, 2 when the app could not be reached. It only reads: tools and actions are never called.
 
+When the operator gave you a prompt with an enrolment link, `connect` trades it for the app's token
+and writes it into the app's env file without printing it:
+
+```bash
+npx opstead connect https://ops-hook.example/enrol/<code> --env .env --app-url http://127.0.0.1:3000
+```
+
+The link works once, for two hours. `--app-url` is where the app answers `/ops/` as reachable from
+the operator.
+
 ## The levels
 
 | Level | The app serves | What an operator can then do |

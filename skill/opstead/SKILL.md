@@ -61,7 +61,11 @@ localhost for `/ops/*` only, and say so.
   still starts). Add `OPS_TOKEN=` to the example env file and never commit a value (check the example file is
   really tracked: `git check-ignore -v <file>`; a `.env.*` rule often hides it, and say so if it does). Tell the user to
   set it (`openssl rand -hex 24`) wherever the server process gets its environment; if the app loads
-  no env file, say exactly that rather than adding a loader.
+  no env file, say exactly that rather than adding a loader. When the owner's prompt carries an
+  enrolment link from the operator, run `npx -y opstead connect <link> --env <the env file the server
+  reads> [--app-url <where /ops/ answers, as the operator reaches it>]` instead: it writes the token
+  (and the heartbeat settings) into that file without printing them, and registers the app with the
+  operator, so no apps-file entry is needed.
 - Check `Authorization: Bearer <token>` with a constant-time compare on every `/ops/*` route; answer
   404 without it. Any body is fine on a 404.
 - Mount the routes under `/ops/` in the app's own style (a router, a plugin, a blueprint). Anything

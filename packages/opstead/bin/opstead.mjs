@@ -2,11 +2,13 @@
 // @ts-check
 import { readFileSync } from "node:fs";
 import { checkApp, LEVEL_NAMES, NEXT } from "../lib/check.mjs";
+import { connect } from "../lib/connect.mjs";
 
 const HELP = `opstead: care for the apps you ship
 
 Usage:
   opstead check <url> [--token <token>] [--json]
+  opstead connect <enrol-link> [--env <file>] [--app-url <url>]
 
   Checks the app at <url> against the OPStead contract (/ops/health, /ops/manifest,
   /ops/metrics) and says which level it reaches:
@@ -18,6 +20,11 @@ Usage:
 
   --token  the bearer the app expects on /ops/* (default: $OPSTEAD_TOKEN, then $OPS_TOKEN)
   --json   machine-readable report (for agents)
+
+  connect  trades the one-time enrolment link from an operator's prompt for the app's token
+           and writes OPS_TOKEN (and HEARTBEAT_URL, HEARTBEAT_TOKEN) into the env file
+           (default .env), never printing them. --app-url tells the operator where the app
+           answers /ops/, as reachable from the operator.
 
 Exit code: 0 when nothing is wrong, 1 when something is, 2 when the app could not be checked.`;
 
@@ -38,7 +45,21 @@ if (args.includes("--version") || args.includes("-v")) {
 const json = args.includes("--json");
 if (json) args.splice(args.indexOf("--json"), 1);
 const token = flag("--token") ?? process.env.OPSTEAD_TOKEN ?? process.env.OPS_TOKEN;
+const envFile = flag("--env") ?? ".env";
+const appUrl = flag("--app-url");
 const [cmd, url] = args;
+
+if (cmd === "connect" && url) {
+  try {
+    const r = await connect(url, { env: envFile, appUrl });
+    console.log(`${r.name}: enrolled with the operator; wrote ${r.written.join(", ")} to ${envFile} (values not shown; keep the file out of git).`);
+    console.log(`The operator asks /ops/ at ${r.app_url ?? "(not set: give --app-url, or set it on the operator's page)"}.`);
+    process.exit(0);
+  } catch (e) {
+    console.error(`opstead connect: ${/** @type {Error} */ (e).message}`);
+    process.exit(2);
+  }
+}
 
 if (cmd !== "check" || !url || args.includes("--help") || args.includes("-h")) {
   console.log(HELP);

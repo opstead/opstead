@@ -1,6 +1,6 @@
 {
   "name": "opstead",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Care for the apps you ship: check an app against the OPStead ops contract 0.2 (health, components, tools, guarded actions, speed).",
   "homepage": "https://github.com/opstead/opstead#readme",
   "repository": {
@@ -17,6 +17,10 @@
     ".": {
       "types": "./lib/check.d.mts",
       "default": "./lib/check.mjs"
+    },
+    "./connect": {
+      "types": "./lib/connect.d.mts",
+      "default": "./lib/connect.mjs"
     }
   },
   "files": [
