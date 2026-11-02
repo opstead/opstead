@@ -65,7 +65,10 @@ localhost for `/ops/*` only, and say so.
   enrolment link from the operator, run `npx -y opstead connect <link> --env <the env file the server
   reads> [--app-url <where /ops/ answers, as the operator reaches it>]` instead: it writes the token
   (and the heartbeat settings) into that file without printing them, and registers the app with the
-  operator, so no apps-file entry is needed.
+  operator, so no apps-file entry is needed. Do it first, before writing code: the link works once,
+  within a day. When production takes its settings from CI secrets or a host panel, copy them there
+  from that file without printing them (GitHub Actions: `grep '^OPS_TOKEN=' <file> | cut -d= -f2- |
+  gh secret set OPS_TOKEN`). A used or old link: ask the owner for a new one from the operator's page.
 - Check `Authorization: Bearer <token>` with a constant-time compare on every `/ops/*` route; answer
   404 without it. Any body is fine on a 404.
 - Mount the routes under `/ops/` in the app's own style (a router, a plugin, a blueprint). Anything

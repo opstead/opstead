@@ -31,8 +31,9 @@ and writes it into the app's env file without printing it:
 npx opstead connect https://ops-hook.example/enrol/<code> --env .env --app-url http://127.0.0.1:3000
 ```
 
-The link works once, for two hours. `--app-url` is where the app answers `/ops/` as reachable from
-the operator.
+The link works once, within a day. `--app-url` is where the app answers `/ops/` as reachable from
+the operator. When production takes its settings from CI secrets rather than that file, copy them
+there from the file without printing them, e.g. `grep '^OPS_TOKEN=' .env | cut -d= -f2- | gh secret set OPS_TOKEN`.
 
 ## The levels
 

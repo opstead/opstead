@@ -32,7 +32,7 @@ export async function connect(enrolUrl, opts) {
   if (!/^\/enrol\/[A-Za-z0-9_-]{20,}$/.test(u.pathname)) throw new Error("that is not an enrolment link (…/enrol/<code>)");
   if (opts.appUrl) u.searchParams.set("url", opts.appUrl);
   const res = await (opts.fetch ?? fetch)(u.href, { method: "POST", signal: AbortSignal.timeout(20_000) });
-  if (res.status === 404) throw new Error("the operator does not know this code: it was used already or is older than two hours; open the prompt again for a new one");
+  if (res.status === 404) throw new Error("the operator does not know this code: it was used already or is older than a day; make a new link on the operator's page");
   if (!res.ok) throw new Error(`the operator answered HTTP ${res.status}`);
   /** @type {{ name: string, token: string, app_url: string | null, heartbeat_url?: string, heartbeat_token?: string }} */
   const r = await res.json();
