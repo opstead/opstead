@@ -1,4 +1,4 @@
-# The OPStead contract, version 0.4
+# The OPStead contract, version 0.5
 
 What an app serves about itself so that an operator (OPStead, or anything else that reads this) can
 watch it, place a problem in it, investigate it and, within limits the app sets, fix it.
@@ -22,7 +22,10 @@ only when every level below it holds. `opstead check <url>` reports the level an
 | 3 knowledge | `context` and `tools` in the manifest, `GET /ops/tools/<name>`; `operations` and `GET /ops/runs` for long work | let an AI investigate with the app's own data, knowing what is normal; tell when work got slower and which step |
 | 4 hands | `actions` in the manifest, `POST /ops/actions/<name>` | propose fixes; run the ones the policy allows; verify they worked |
 
-`GET /ops/metrics` is optional at every level.
+`GET /ops/metrics` is optional at every level. So is everything in [What changed and
+when](#what-changed-and-when) (`commit` and `deployed_at` in the health reply, `source` in the
+manifest, deploy events from the pipeline): it says when what changed, which helps at every level and
+raises none.
 
 ## Routes and the token
 
@@ -46,7 +49,9 @@ needed).
 ```json
 {
   "app": "shop",
-  "version": "3c49e78",
+  "version": "1.4.2",
+  "commit": "3c49e78d0b6f2a1e9c5d4b7a8f0e1d2c3b4a5f6e",
+  "deployed_at": "2026-11-01T09:12:40Z",
   "at": "2026-11-01T12:00:00Z",
   "status": "warn",
   "checks": [
@@ -59,7 +64,9 @@ needed).
 | Field | | |
 |---|---|---|
 | `app` | SHOULD | The app's name, stable, lowercase. |
-| `version` | SHOULD | A commit or release, so a problem can be tied to a deploy. |
+| `version` | SHOULD | A release or a commit, so a problem can be tied to a deploy. |
+| `commit` | MAY | The commit that runs: its hex id, full or short (at least 7). Counts toward no level. |
+| `deployed_at` | MAY | When the running code was put in place (ISO 8601); the process's start time when nothing better is known. Counts toward no level. |
 | `at` | MAY | When this judgement was made (ISO 8601). |
 | `status` | SHOULD | `ok`, `warn` or `bad`: the worst level among the checks. |
 | `checks` | MUST | An array, one entry per thing the app looks at. |
@@ -114,8 +121,9 @@ code changes, not from request to request.
 ```
 
 Manifest fields at this level: `app` (SHOULD), `contract` (SHOULD: the version of this document the
-app follows, `"0.4"`), `version` (MAY), `components` (MUST for level 2), `providers` (MUST for level 2,
-with at least one `hosting` entry).
+app follows, `"0.5"`), `version` (MAY), `components` (MUST for level 2), `providers` (MUST for level 2,
+with at least one `hosting` entry), `source` (MAY: where the code lives; see [What changed and
+when](#what-changed-and-when)).
 
 Each component:
 
@@ -348,6 +356,146 @@ investigates. An app does not report `slow` itself, with one exception: a hard l
 
 `GET /ops/metrics` MAY add a histogram `<app>_step_seconds{operation, step}` for long-term trends.
 
+## What changed and when
+
+Most faults follow a release, so the operator needs to know what runs, when it changed and where its
+code lives. Three sources say it, each optional, none a level: an app with no git and no build (a site
+uploaded by hand, someone else's software behind an adapter) can know a great deal about itself and
+still not know its commit, and every level stays reachable for it.
+
+| Source | Says | Wins for |
+|---|---|---|
+| the health reply | `version`, `commit`, `deployed_at`: what runs now | what is running: it is the process speaking, not what CI thinks it shipped |
+| a deploy event from the pipeline | `started`, `succeeded` or `failed`, with `version`, `commit`, `repo`, `run_url` | when a release was tried and how it went |
+| the manifest's `source` | the repository and, in a monorepo, the path | where the code lives, when no deploy event has said |
+
+A deploy event's `repo` and `commit` win over the manifest's `source`: they describe what was shipped.
+
+### Running values in `/ops/health`
+
+`commit` and `deployed_at` sit beside `version` (see Level 1). They are **read from the running
+thing**: stamped by the build or the deploy (an environment variable the host or the pipeline sets, a
+file written at deploy time) and read when the process starts, so they say what the process loaded,
+not what is on disk now. Never guessed, never computed from the clock at request time; left out when
+they cannot be known. An operator keeps every change it sees, so even an app with no pipeline gets its
+releases marked ("now runs 1.4.2"), a few minutes late.
+
+### `source` in the manifest
+
+```json
+"source": { "repo": "https://github.com/owner/shop", "path": "backend" }
+```
+
+| Field | | |
+|---|---|---|
+| `repo` | MUST | The repository's `https://` address, on any host (GitHub, GitLab, Gitea, Forgejo, Bitbucket, your own). It MUST NOT carry a credential: no `user:token@`, no token in the query. |
+| `path` | MAY | In a monorepo, the app's directory, relative to the repository's root (`backend`, `apps/shop`). |
+
+The operator links commits and compare views from it; it fetches nothing unless its owner gives it a
+read-only token of its own. An app with no remote leaves `source` out and loses only the links.
+
+### Deploy events (operator side)
+
+The pipeline that deploys **production** tells the operator, like a heartbeat: once when it starts and
+once when it ends.
+
+```
+POST <deploy URL>
+Authorization: Bearer <deploy token>
+Content-Type: application/json
+
+{ "app": "shop", "status": "succeeded", "version": "1.4.2", "commit": "3c49e78d0b6f2a1e9c5d4b7a8f0e1d2c3b4a5f6e",
+  "repo": "https://github.com/owner/shop", "run_url": "https://github.com/owner/shop/actions/runs/123", "at": "2026-11-01T09:12:40Z" }
+```
+
+| Field | | |
+|---|---|---|
+| `app` | MUST | The app's name, as in its health reply. It MUST be the deploy token's app; the operator answers `403` otherwise. |
+| `status` | MUST | `started`, `succeeded` or `failed`. |
+| `version` | MAY | The release, as the health reply will say it. |
+| `commit` | MAY | The commit deployed (hex). |
+| `repo` | MAY | The repository's `https://` address, without a credential. |
+| `run_url` | MAY | The pipeline run, for the owner to open. |
+| `at` | MAY | When it happened (ISO 8601); the operator uses the time it received the event otherwise. |
+
+Rules:
+
+- **Production only**: the deployment the operator watches, the one people use. Staging, previews and
+  pull-request builds post nothing. A pipeline that deploys staging and production posts only
+  production's; a staging that must be watched is an app of its own.
+- **A run that fails at any step posts `failed`**, naming no step: its tests, its build or the deploy
+  itself. All that matters to the operator is that production did not change.
+- **It MUST NOT fail or slow the deploy.** A short timeout and `|| true`. The operator answers `202` at
+  once and does no work in the request; the same app, commit, status and `run_url` sent twice is one
+  event, so a retried step does no harm.
+- **The deploy token** is the app's own, made by the operator at enrolment next to `OPS_TOKEN`, and can
+  only post deploy events for that app. The pipeline holds it (`OPS_DEPLOY_TOKEN`, with the URL as
+  `OPS_DEPLOY_URL`); it never holds `OPS_TOKEN`. `npx opstead connect` writes both into the app's env
+  file and, with `--ci github`, into the repository's Actions secrets, printing neither.
+
+GitHub Actions, in the job that deploys production. The first step goes before the deploy, the
+second last, and runs on success and failure alike (replace `shop` with the app's name):
+
+```yaml
+- name: Tell ops the deploy started
+  env:
+    OPS_DEPLOY_URL: ${{ secrets.OPS_DEPLOY_URL }}
+    OPS_DEPLOY_TOKEN: ${{ secrets.OPS_DEPLOY_TOKEN }}
+    STATUS: started
+  run: |
+    [ -n "$OPS_DEPLOY_URL" ] || exit 0
+    curl -fsS -m 10 -X POST "$OPS_DEPLOY_URL" \
+      -H "Authorization: Bearer $OPS_DEPLOY_TOKEN" -H "Content-Type: application/json" \
+      -d "$(jq -n --arg app shop --arg status "$STATUS" --arg version "${VERSION:-${GITHUB_SHA::7}}" \
+            --arg commit "$GITHUB_SHA" --arg repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --arg run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{app:$app,status:$status,version:$version,commit:$commit,repo:$repo,run_url:$run_url}')" || true
+
+# … the steps that test, build and deploy …
+
+- name: Tell ops how the deploy ended
+  if: always()
+  env:
+    OPS_DEPLOY_URL: ${{ secrets.OPS_DEPLOY_URL }}
+    OPS_DEPLOY_TOKEN: ${{ secrets.OPS_DEPLOY_TOKEN }}
+    STATUS: ${{ job.status == 'success' && 'succeeded' || 'failed' }}
+  run: |
+    [ -n "$OPS_DEPLOY_URL" ] || exit 0
+    curl -fsS -m 10 -X POST "$OPS_DEPLOY_URL" \
+      -H "Authorization: Bearer $OPS_DEPLOY_TOKEN" -H "Content-Type: application/json" \
+      -d "$(jq -n --arg app shop --arg status "$STATUS" --arg version "${VERSION:-${GITHUB_SHA::7}}" \
+            --arg commit "$GITHUB_SHA" --arg repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --arg run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            '{app:$app,status:$status,version:$version,commit:$commit,repo:$repo,run_url:$run_url}')" || true
+```
+
+- Without the secrets (a fork, a repository not yet connected) both steps do nothing.
+- `VERSION` is the release if an earlier step exports one (`echo "VERSION=1.4.2" >> "$GITHUB_ENV"`);
+  otherwise the short commit. Use the same value the health reply's `version` will show.
+- A workflow that also runs for pull requests or other branches gives both steps the condition its
+  deploy step already has, e.g. `if: github.event_name == 'push' && github.ref == 'refs/heads/main'`
+  (the second step: `if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'`).
+- When tests and the deploy are separate jobs, a failed test job skips the deploy job and its steps.
+  Then put the second step in a job of its own that `needs` every job of the run, with `if: always()`
+  (and the production condition) and
+  `STATUS: ${{ (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) && 'failed' || 'succeeded' }}`.
+
+Any other CI, or a deploy script run by hand (`set -e`, so any failing step ends it and posts `failed`):
+
+```bash
+tell_ops() {  # tell_ops started|succeeded|failed
+  [ -n "$OPS_DEPLOY_URL" ] || return 0
+  curl -fsS -m 10 -X POST "$OPS_DEPLOY_URL" -H "Authorization: Bearer $OPS_DEPLOY_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"app\":\"shop\",\"status\":\"$1\",\"version\":\"$VERSION\",\"commit\":\"$(git rev-parse HEAD)\"}" || true
+}
+set -e
+tell_ops started
+trap '[ $? -eq 0 ] || tell_ops failed' EXIT
+# … test, build, deploy …
+tell_ops succeeded
+```
+
 ## `GET /ops/metrics` (optional)
 
 Prometheus text format (`text/plain; version=0.0.4`). Counters and gauges the app already has. The
@@ -380,7 +528,7 @@ configuration how often each job should run, and opens `heartbeat_missed` when a
 
 ## Versioning
 
-This document is `0.4`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
+This document is `0.5`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
 minor version and is listed in [`CHANGES.md`](CHANGES.md). Operators ignore fields they do not know;
 apps ignore body fields they do not know.
 

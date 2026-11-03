@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { checkApp, NEXT, validateHealth, validateManifest } from "../lib/check.mjs";
+import { checkApp, NEXT, validateHealth, validateManifest, validateSource } from "../lib/check.mjs";
 
 const health = { app: "shop", version: "1", status: "warn", checks: [{ id: "db", level: "ok" }, { id: "stale", level: "warn", subject: "a", detail: "3 stale", data: { n: 3 } }] };
 const manifest = {
@@ -189,5 +189,81 @@ describe("tech", () => {
   it("the spec's example declares it", () => {
     const m = JSON.parse(readFileSync(new URL("../../../spec/examples/manifest.json", import.meta.url), "utf8"));
     assert.equal(validateManifest(m, new Set()).has.tech, 2);
+  });
+});
+
+describe("what changed and when", () => {
+  const SHA = "3c49e78d0b6f2a1e9c5d4b7a8f0e1d2c3b4a5f6e";
+  const fetchWith = (h, m = manifest) => app({ "/ops/health": h, "/ops/manifest": m });
+
+  it("reads commit and deployed_at from health, and they count toward no level", async () => {
+    const r = await checkApp("https://shop.example", { token: "t", fetch: fetchWith({ ...health, version: "1.4.2", commit: SHA, deployed_at: "2026-11-01T09:12:40Z" }) });
+    assert.equal(r.level, 4);
+    assert.deepEqual(r.running, { version: "1.4.2", commit: SHA, deployed_at: "2026-11-01T09:12:40Z" });
+    assert.ok(!r.findings.some((f) => f.where === "health" && /not reported/.test(f.message)));
+    const without = await checkApp("https://shop.example", { token: "t", fetch: fetchWith(health) });
+    assert.equal(without.level, 4);
+    assert.ok(has(without.findings, { level: "ok", where: "health" }), "a hint, not a warning");
+    assert.match(without.findings.find((f) => f.where === "health")?.message ?? "", /^commit, deployed_at not reported/);
+  });
+
+  it("a malformed commit or deployed_at warns and costs no level", () => {
+    const now = Date.parse("2026-11-03T12:00:00Z");
+    for (const [field, value] of [["commit", "main"], ["commit", "3c49e7"], ["commit", 123], ["deployed_at", "yesterday"], ["deployed_at", "2026-11-01 09:12"], ["deployed_at", "2026-11-04T12:00:00Z"]]) {
+      const v = validateHealth({ ...health, [field]: value }, { now });
+      assert.ok(has(v.findings, { level: "warn", where: `health.${field}` }), `${field}=${value}`);
+      assert.ok(!v.findings.some((f) => f.level === "error"), `${field}=${value}`);
+      assert.equal(v.running[field], undefined);
+    }
+    assert.equal(validateHealth({ ...health, commit: "3C49E78", deployed_at: "2026-11-03T12:03:00+01:00" }, { now }).running.commit, "3C49E78");
+  });
+
+  it("source: the repo, any host, with a path in a monorepo", () => {
+    for (const [src, want] of [
+      [{ repo: "https://github.com/owner/shop" }, { repo: "https://github.com/owner/shop" }],
+      [{ repo: "https://git.example.org/owner/shop.git/", path: "./apps/shop/" }, { repo: "https://git.example.org/owner/shop.git", path: "apps/shop" }],
+    ]) {
+      const out = [];
+      assert.deepEqual(validateSource(src, out), want);
+      assert.ok(has(out, { level: "ok", where: "manifest.source" }));
+    }
+    const out = [];
+    assert.equal(validateSource(undefined, out), undefined);
+    assert.ok(has(out, { level: "ok", where: "manifest.source" }), "absent is a hint");
+  });
+
+  it("source: a credential in the URL is an error, but costs no level", async () => {
+    for (const repo of ["https://x-access-token:ghp_abc@github.com/owner/shop", "https://oauth2@gitlab.example/owner/shop", "https://gitlab.example/owner/shop?private_token=abc", "https://git.example/owner/shop?x=glpat-aaaaaaaaaaaaaaaaaaaa"]) {
+      const r = await checkApp("https://shop.example", { token: "t", fetch: fetchWith(health, { ...manifest, source: { repo } }) });
+      assert.ok(has(r.findings, { level: "error", where: "manifest.source.repo" }), repo);
+      assert.ok(!r.findings.some((f) => /ghp_abc|glpat-|=abc/.test(f.message)), "never repeats the credential");
+      assert.equal(r.source, undefined, repo);
+      assert.equal(r.level, 4, repo);
+    }
+  });
+
+  it("source: other mistakes warn", () => {
+    for (const [src, where] of [
+      ["https://github.com/owner/shop", "manifest.source"],
+      [{ path: "backend" }, "manifest.source.repo"],
+      [{ repo: "git@github.com:owner/shop.git" }, "manifest.source.repo"],
+      [{ repo: "http://git.example/owner/shop" }, "manifest.source.repo"],
+      [{ repo: "https://github.com" }, "manifest.source.repo"],
+      [{ repo: "https://github.com/owner/shop?tab=readme" }, "manifest.source.repo"],
+      [{ repo: "https://github.com/owner/shop", path: "/srv/shop" }, "manifest.source.path"],
+      [{ repo: "https://github.com/owner/shop", path: "../other" }, "manifest.source.path"],
+    ]) {
+      const out = [];
+      validateSource(src, out);
+      assert.ok(has(out, { level: "warn", where }), `${JSON.stringify(src)}: ${JSON.stringify(out)}`);
+      assert.ok(!out.some((f) => f.level === "error"), JSON.stringify(src));
+    }
+  });
+
+  it("the spec's examples carry them", () => {
+    const read = (n) => JSON.parse(readFileSync(new URL(`../../../spec/examples/${n}.json`, import.meta.url), "utf8"));
+    const h = validateHealth(read("health"));
+    assert.equal(h.running.commit, SHA);
+    assert.deepEqual(validateManifest(read("manifest"), h.ids).source, { repo: "https://github.com/owner/shop" });
   });
 });

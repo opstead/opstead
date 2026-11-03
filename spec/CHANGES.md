@@ -1,5 +1,22 @@
 # Contract changes
 
+## 0.5 (2026-11-03)
+
+- **What changed and when**: three optional sources tell an operator what runs, when it changed and
+  where its code lives, so an investigation can start from the last deploy. None is a level.
+  - `/ops/health` may carry `commit` (hex, at least 7) and `deployed_at` (ISO 8601) beside `version`,
+    read from what the build or deploy stamped, left out when unknown.
+  - The manifest may carry `source`: `{ "repo": "https://…", "path"?: "backend" }`, any host. A
+    credential in the URL (`user:token@`, a token in the query) is an error for the checker.
+  - The production pipeline posts **deploy events** (`started`, `succeeded`, `failed`; `version`,
+    `commit`, `repo`, `run_url`, `at`) to the operator's deploy URL with the app's own deploy token,
+    which can do nothing else. Staging, previews and pull-request builds post nothing; a run that
+    fails at any step posts `failed`; the step never fails a deploy. Schema: `deploy.schema.json`.
+  - Enrolment hands out the deploy token (`deploy_token`, `deploy_url`); `opstead connect` writes
+    `OPS_DEPLOY_TOKEN` and `OPS_DEPLOY_URL`, and with `--ci github` sets them as Actions secrets.
+
+  Additive: a 0.4 app is a valid 0.5 app.
+
 ## 0.4 (2026-11-03)
 
 - **Tech**: a component may declare `tech`, what it runs on: `[{ "name": "MySQL", "version": "5.7.44" }]`,

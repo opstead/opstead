@@ -3,8 +3,9 @@
  * Checks an app against the OPStead contract and says which level it reaches:
  * 1 health (/ops/health), 2 shape (components, a hosting provider), 3 knowledge (context, tools),
  * 4 hands (actions).
- * A level counts only when every level below it holds and it has no errors. Reads only: tools and
- * actions are never called.
+ * A level counts only when every level below it holds and it has no errors. What changed and when
+ * (commit and deployed_at in health, source in the manifest) is optional and counts toward no level;
+ * a credential in source is still an error. Reads only: tools and actions are never called.
  */
 
 export const KINDS = ["service", "job", "store", "external", "ui"];
@@ -16,28 +17,53 @@ const DURATION = /^\d+(?:\.\d+)?\s*(?:ms|s|m|h|d)$/;
 /** Checks the operator adds itself (launchd, heartbeats, probes); an app never reports them. */
 const OPERATOR_CHECKS = ["service_down", "heartbeat_missed", "job_failed", "http_down", "http_slow", "slow"];
 const LIMIT = /^\d+\s*\/\s*\d+\s*(?:ms|s|m|h|d)$/;
+const COMMIT = /^[0-9a-f]{7,64}$/i;
+/** ISO 8601 date and time, with a zone (what Date.parse reads the same everywhere). */
+const ISO_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:?\d\d)$/;
+/** Query names and values that carry a credential in a repository URL. */
+const SECRET_NAME = /token|key|secret|auth|pass|cred|sig|session/i;
+const SECRET_VALUE = /^(?:gh[pousr]_|github_pat_|glpat-|gldt-|xox[bap]-)|^[A-Za-z0-9_\-]{32,}$/;
 
 /** @typedef {{ level: "error" | "warn" | "ok", where: string, message: string }} Finding */
-/** @typedef {{ url: string, app?: string, level: number, findings: Finding[], metrics?: boolean, next?: string, tech?: number }} Report */
+/** @typedef {{ version?: string, commit?: string, deployed_at?: string }} Running */
+/** @typedef {{ repo: string, path?: string }} Source */
+/** @typedef {{ url: string, app?: string, level: number, findings: Finding[], metrics?: boolean, next?: string, tech?: number, running?: Running, source?: Source }} Report */
 
 const isObj = (/** @type {unknown} */ v) => typeof v === "object" && v !== null && !Array.isArray(v);
 const isStr = (/** @type {unknown} */ v) => typeof v === "string" && v.trim() !== "";
 
 /**
  * @param {unknown} body
- * @returns {{ findings: Finding[], ids: Set<string> }}
+ * @param {{ now?: number }} [opts]
+ * @returns {{ findings: Finding[], ids: Set<string>, running: Running }}
  */
-export function validateHealth(body) {
+export function validateHealth(body, opts = {}) {
   /** @type {Finding[]} */
   const out = [];
   const ids = new Set();
+  /** @type {Running} */
+  const running = {};
   const err = (where, message) => out.push({ level: "error", where, message });
   const warn = (where, message) => out.push({ level: "warn", where, message });
-  if (!isObj(body)) return { findings: [{ level: "error", where: "health", message: "the reply is not a JSON object" }], ids };
+  if (!isObj(body)) return { findings: [{ level: "error", where: "health", message: "the reply is not a JSON object" }], ids, running };
   const b = /** @type {Record<string, unknown>} */ (body);
   if (!Array.isArray(b.checks)) err("health.checks", "missing: an array of checks is required");
   if (!isStr(b.app)) warn("health.app", "missing: the app's name helps when one person runs many apps");
   if (b.version !== undefined && typeof b.version !== "string") warn("health.version", "should be a string (a commit or release)");
+  else if (isStr(b.version)) running.version = /** @type {string} */ (b.version);
+  // What runs now: optional, no level; checked only for shape.
+  if (b.commit !== undefined) {
+    if (typeof b.commit === "string" && COMMIT.test(b.commit)) running.commit = b.commit;
+    else warn("health.commit", "must be the hex id of the commit that runs (at least 7 characters), as the build or deploy stamped it; leave it out when it is not known");
+  }
+  if (b.deployed_at !== undefined) {
+    const t = typeof b.deployed_at === "string" && ISO_TIME.test(b.deployed_at) ? Date.parse(b.deployed_at) : NaN;
+    if (Number.isNaN(t)) warn("health.deployed_at", 'must be an ISO 8601 time with a zone ("2026-11-01T09:12:40Z"): when the running code was put in place');
+    else if (t > (opts.now ?? Date.now()) + 5 * 60_000) warn("health.deployed_at", "is in the future: it must say when the running code was put in place, read from what the deploy stamped");
+    else running.deployed_at = /** @type {string} */ (b.deployed_at);
+  }
+  const unknown = ["version", "commit", "deployed_at"].filter((k) => b[k] === undefined);
+  if (unknown.length) out.push({ level: "ok", where: "health", message: `${unknown.join(", ")} not reported (optional, needed for no level): when the build or deploy stamps them, report them so an operator can tie a problem to a release` });
   if (b.status !== undefined && !LEVELS.includes(/** @type {string} */ (b.status))) err("health.status", `must be one of ${LEVELS.join(", ")}`);
   const checks = Array.isArray(b.checks) ? b.checks : [];
   if (Array.isArray(b.checks) && checks.length === 0) warn("health.checks", "empty: report ok-level checks too, so the owner can see what the app looks at");
@@ -60,7 +86,7 @@ export function validateHealth(body) {
     ids.add(c.id);
   });
   if (LEVELS.includes(/** @type {string} */ (b.status)) && checks.length && LEVELS.indexOf(/** @type {string} */ (b.status)) < worst) warn("health.status", `says ${b.status} but a check is ${LEVELS[worst]}`);
-  return { findings: out, ids };
+  return { findings: out, ids, running };
 }
 
 /**
@@ -80,9 +106,66 @@ function validateParams(params, at, out) {
 }
 
 /**
+ * The manifest's `source`: where the code lives. Optional and no level; a credential in it is an error
+ * all the same, since an operator stores and shows the address.
+ * @param {unknown} src
+ * @param {Finding[]} out
+ * @returns {Source | undefined} the source when it is usable
+ */
+export function validateSource(src, out) {
+  const at = "manifest.source";
+  const err = (where, message) => out.push({ level: "error", where, message });
+  const warn = (where, message) => out.push({ level: "warn", where, message });
+  if (src === undefined) {
+    out.push({ level: "ok", where: at, message: 'not declared (optional, needed for no level): {"repo": "https://…"} lets an operator link commits and compare deploys' });
+    return undefined;
+  }
+  if (!isObj(src)) return void warn(at, 'must be an object: {"repo": "https://…", "path"?: "backend"}');
+  const s = /** @type {Record<string, unknown>} */ (src);
+  if (!isStr(s.repo)) return void warn(`${at}.repo`, "missing: the repository's https address");
+  const repo = /** @type {string} */ (s.repo).trim();
+  // An scp-style address (git@host:owner/name) is not a URL but may still be shared; say what to write.
+  if (/^[\w.-]+@[\w.-]+:/.test(repo)) return void warn(`${at}.repo`, "write the repository's https address, not its ssh one (git@…)");
+  let u;
+  try {
+    u = new URL(repo);
+  } catch {
+    return void warn(`${at}.repo`, "must be the repository's https address");
+  }
+  let usable = true;
+  if (u.username || u.password) {
+    err(`${at}.repo`, "carries a credential (user:token@): an operator stores and shows this address. Remove it, and replace that token, since it has been served");
+    usable = false;
+  }
+  const leaked = [...u.searchParams].filter(([k, v]) => SECRET_NAME.test(k) || SECRET_VALUE.test(v));
+  if (leaked.length) {
+    err(`${at}.repo`, `carries a credential in its query (${leaked.map(([k]) => k).join(", ")}): an operator stores and shows this address. Remove it, and replace that token, since it has been served`);
+    usable = false;
+  } else if (u.search || u.hash) warn(`${at}.repo`, "drop the query and fragment: the repository's address is enough");
+  if (u.protocol !== "https:") {
+    warn(`${at}.repo`, `use the repository's https address, not ${u.protocol.replace(":", "")}`);
+    usable = false;
+  } else if (u.pathname.replace(/\/+$/, "") === "") {
+    warn(`${at}.repo`, "is a host, not a repository: give its full address (https://host/owner/name)");
+    usable = false;
+  }
+  /** @type {string | undefined} */
+  let path;
+  if (s.path !== undefined) {
+    if (!isStr(s.path)) warn(`${at}.path`, 'must be the app\'s directory in the repository ("backend"); leave it out when the app is the whole repository');
+    else if (/^\//.test(/** @type {string} */ (s.path)) || /(^|\/)\.\.(\/|$)/.test(/** @type {string} */ (s.path))) warn(`${at}.path`, "must be relative to the repository's root, inside it");
+    else path = /** @type {string} */ (s.path).replace(/^\.\/|\/+$/g, "");
+  }
+  if (!usable) return undefined;
+  const clean = `${u.origin}${u.pathname.replace(/\/+$/, "")}`;
+  out.push({ level: "ok", where: at, message: `the code lives at ${clean}${path ? ` (${path})` : ""}` });
+  return path ? { repo: clean, path } : { repo: clean };
+}
+
+/**
  * @param {unknown} body
  * @param {Set<string>} healthIds the check ids /ops/health reported now
- * @returns {{ findings: Finding[], has: { components: boolean, hosting: boolean, knowledge: boolean, actions: boolean, tech: number }, errorsAt: { 2: boolean, 3: boolean, 4: boolean } }}
+ * @returns {{ findings: Finding[], has: { components: boolean, hosting: boolean, knowledge: boolean, actions: boolean, tech: number }, errorsAt: { 2: boolean, 3: boolean, 4: boolean }, source?: Source }}
  */
 export function validateManifest(body, healthIds) {
   /** @type {Finding[]} */
@@ -99,8 +182,11 @@ export function validateManifest(body, healthIds) {
   }
   const m = /** @type {Record<string, unknown>} */ (body);
 
-  if (m.contract === undefined) out.push({ level: "warn", where: "manifest.contract", message: 'missing: say which contract version the app follows ("0.1")' });
-  else if (typeof m.contract !== "string") out.push({ level: "warn", where: "manifest.contract", message: 'must be a string like "0.1"' });
+  if (m.contract === undefined) out.push({ level: "warn", where: "manifest.contract", message: 'missing: say which contract version the app follows ("0.5")' });
+  else if (typeof m.contract !== "string") out.push({ level: "warn", where: "manifest.contract", message: 'must be a string like "0.5"' });
+
+  // Where the code lives: optional, no level.
+  const source = validateSource(m.source, out);
 
   // Level 2: components.
   const comps = m.components === undefined ? [] : m.components;
@@ -236,7 +322,7 @@ export function validateManifest(body, healthIds) {
       if (validateParams(a.params, `${at}.params`, out)) errorsAt[4] = true;
     });
   }
-  return { findings: out, has, errorsAt };
+  return { findings: out, has, errorsAt, source };
 }
 
 /**
@@ -301,6 +387,8 @@ export async function checkApp(url, opts = {}) {
   let next;
   /** @type {number | undefined} */
   let tech;
+  /** @type {Source | undefined} */
+  let source;
   try {
     const res = await get("/ops/manifest");
     if (res.ok) manifest = await res.json().catch(() => null);
@@ -312,6 +400,7 @@ export async function checkApp(url, opts = {}) {
     const m = validateManifest(manifest, h.ids);
     findings.push(...m.findings);
     tech = m.has.tech;
+    source = m.source;
     if (isObj(manifest) && Array.isArray(manifest.operations) && manifest.operations.length) {
       const runs = await get("/ops/runs?limit=5").then(async (r) => (r.ok ? r.json().catch(() => null) : r.status), () => 0);
       const bad = validateRuns(runs);
@@ -325,7 +414,7 @@ export async function checkApp(url, opts = {}) {
     if (level >= 3 && m.has.actions && !m.errorsAt[4]) level = 4;
     if (level === 1 && m.has.components && !m.has.hosting) next = "Declare where the app runs in the manifest's providers: at least one hosting provider (the company, or \"self\" for one of the operator's machines).";
   }
-  return { url: base, app, level, findings, metrics, next: next ?? (NEXT[level] || undefined), tech };
+  return { url: base, app, level, findings, metrics, next: next ?? (NEXT[level] || undefined), tech, running: h.running, source };
 }
 
 export const LEVEL_NAMES = ["none", "health", "shape", "knowledge", "hands"];

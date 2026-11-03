@@ -1,0 +1,9 @@
+{
+  "app": "shop",
+  "status": "succeeded",
+  "version": "1.4.2",
+  "commit": "3c49e78d0b6f2a1e9c5d4b7a8f0e1d2c3b4a5f6e",
+  "repo": "https://github.com/owner/shop",
+  "run_url": "https://github.com/owner/shop/actions/runs/123",
+  "at": "2026-11-01T09:12:40Z"
+}

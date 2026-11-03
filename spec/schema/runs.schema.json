@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/runs.schema.json",
   "title": "GET /ops/runs",
-  "description": "The app's recorded runs of long operations, newest first (OPStead contract 0.4, speed). Durations and counts only.",
+  "description": "The app's recorded runs of long operations, newest first (OPStead contract 0.5, speed). Durations and counts only.",
   "type": "object",
   "required": [
     "runs"

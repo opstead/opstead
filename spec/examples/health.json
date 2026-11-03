@@ -1,6 +1,8 @@
 {
   "app": "shop",
-  "version": "3c49e78",
+  "version": "1.4.2",
+  "commit": "3c49e78d0b6f2a1e9c5d4b7a8f0e1d2c3b4a5f6e",
+  "deployed_at": "2026-11-01T09:12:40Z",
   "at": "2026-11-01T12:00:00Z",
   "status": "warn",
   "checks": [

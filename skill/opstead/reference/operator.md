@@ -31,6 +31,10 @@ Never put a token's value in chat, a commit or a report: name the variable and l
 `services` are names the machine's host plugin understands; `jobs` must match the heartbeat paths
 and the manifest's `job` fields.
 
+Deploy events need no entry: the operator knows the app by its deploy token. A pipeline on hosted
+runners (GitHub's) posts from outside, so the operator's hook address (`HOOK_URL`) must be reachable
+from the internet for them to arrive; one on the operator's own network needs nothing more.
+
 ## A machine
 
 ```json

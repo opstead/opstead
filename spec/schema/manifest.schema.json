@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/manifest.schema.json",
   "title": "GET /ops/manifest",
-  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.4, levels 2-4). Cross-references (depends_on and serves ids, rollback names) and the hosting provider level 2 needs are checked by `opstead check`, not by this schema.",
+  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.5, levels 2-4). Cross-references (depends_on and serves ids, rollback names) and the hosting provider level 2 needs are checked by `opstead check`, not by this schema.",
   "type": "object",
   "properties": {
     "app": {
@@ -27,6 +27,9 @@
       "items": {
         "$ref": "#/definitions/provider"
       }
+    },
+    "source": {
+      "$ref": "#/definitions/source"
     },
     "context": {
       "type": "string",
@@ -351,6 +354,27 @@
           "type": "string",
           "pattern": "^https?://",
           "description": "A Statuspage-shaped /api/v2/status.json, for a company the operator does not know."
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "description": "Where the code lives, for links to commits and compare views. A deploy event's repo wins over it.",
+      "required": [
+        "repo"
+      ],
+      "properties": {
+        "repo": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^/@?#]+/[^?#]*$",
+          "description": "The repository's https address, on any host, with no credential (no user:token@, no query)."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$",
+          "description": "In a monorepo, the app's directory relative to the repository's root."
         }
       }
     }

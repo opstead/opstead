@@ -63,9 +63,51 @@ export async function health(deps) {
     }),
   ])).flat().filter(Boolean);
   const worst = checks.reduce((w, c) => Math.max(w, LEVELS.indexOf(c.level)), 0);
-  return { app: "shop", version: process.env.GIT_SHA ?? "dev", at: new Date().toISOString(), status: LEVELS[worst], checks };
+  return { app: "shop", ...RUNNING, at: new Date().toISOString(), status: LEVELS[worst], checks };
 }
 ```
+
+## What runs: `version`, `commit`, `deployed_at`
+
+Read once at start-up from what the build or deploy stamped; leave a field out when nothing says it.
+
+```js
+import { readFileSync } from "node:fs";
+
+// The deploy writes build.json next to the code; the host's or pipeline's env var is the fallback.
+// Read at start-up: it says what this process loaded, even if a later deploy changed the files.
+function running() {
+  let stamp = {};
+  try { stamp = JSON.parse(readFileSync(new URL("../build.json", import.meta.url), "utf8")); } catch {}
+  const commit = stamp.commit ?? process.env.GIT_SHA ?? process.env.RENDER_GIT_COMMIT;
+  const version = stamp.version ?? process.env.APP_VERSION ?? commit?.slice(0, 7);
+  // No deploy time stamped: the process's start, which is when this code was put to work.
+  const deployed_at = stamp.deployed_at ?? new Date(Date.now() - process.uptime() * 1000).toISOString();
+  return Object.fromEntries(Object.entries({ version, commit, deployed_at }).filter(([, v]) => v));
+}
+const RUNNING = running();
+```
+
+The stamp, written by the deploy (a GitHub Actions step before the upload, or the deploy script):
+
+```bash
+printf '{"version":"%s","commit":"%s","deployed_at":"%s"}\n' \
+  "${VERSION:-${GITHUB_SHA::7}}" "${GITHUB_SHA:-$(git rev-parse HEAD)}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > build.json
+```
+
+In a Dockerfile: `ARG GIT_SHA` then `ENV GIT_SHA=$GIT_SHA`, built with `--build-arg GIT_SHA=$GITHUB_SHA`
+(a build time is not a deploy time: let `deployed_at` fall back to the start).
+
+Python: read the same file at import, with `datetime.now(timezone.utc)` taken at import as the start.
+PHP has no long-running process; read the file per request, since the files on disk are what runs:
+
+```php
+$stamp = json_decode(@file_get_contents(__DIR__ . '/build.json') ?: '{}', true) ?: [];
+$running = array_filter(['version' => $stamp['version'] ?? null, 'commit' => $stamp['commit'] ?? null,
+  'deployed_at' => $stamp['deployed_at'] ?? null]);
+```
+
+Keep `build.json` out of git (`.gitignore`) when the deploy writes it; it must not say a stale commit.
 
 ## Plain `node:http`
 

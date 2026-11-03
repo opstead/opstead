@@ -1,7 +1,10 @@
 {
   "app": "shop",
-  "contract": "0.4",
-  "version": "3c49e78",
+  "contract": "0.5",
+  "version": "1.4.2",
+  "source": {
+    "repo": "https://github.com/owner/shop"
+  },
   "context": "Sells garden tools in Canada. Every hour the price sync pulls from three suppliers; Supplier A answers 403 for a few minutes after midnight UTC while it rebuilds, which is normal. Orders are low on weekends.",
   "components": [
     {

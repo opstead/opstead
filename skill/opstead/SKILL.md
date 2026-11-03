@@ -1,6 +1,6 @@
 ---
 name: opstead
-description: Add the OPStead ops contract to an app so an operator can watch it, place problems in it, investigate it and run the fixes it declares safe, and register apps, machines and sites with the operator (its plugins for hosts, networks, edge providers, notice channels and login). Use when the user wants an app monitored by OPStead, asks for /ops/health, /ops/manifest, ops tools or ops actions, wants an app "onboarded", "made watchable" or "brought to level N", wants a server, machine or website brought under watch, or asks what `opstead check` reports and how to fix it.
+description: Add the OPStead ops contract to an app so an operator can watch it, place problems in it, investigate it and run the fixes it declares safe, and register apps, machines and sites with the operator (its plugins for hosts, networks, edge providers, notice channels and login). Use when the user wants an app monitored by OPStead, asks for /ops/health, /ops/manifest, ops tools or ops actions, wants an app "onboarded", "made watchable" or "brought to level N", wants a server, machine or website brought under watch, wants ops told about deploys (commit, deploy events, the deploy token in CI), or asks what `opstead check` reports and how to fix it.
 ---
 
 # Onboard an app to the OPStead contract
@@ -44,6 +44,10 @@ Read enough of the app to answer, and keep the answers in your head for every la
   those are the candidate actions.
 - How it is configured (env file, secrets) and deployed, and which processes share that config (a
   server and a cron job often do not).
+- What changed and when (steps 3, 4 and 7): what already tells the running app its commit and deploy
+  time (an env var the host or the pipeline sets, a file the deploy writes, an image build-arg); the
+  git remote (`git remote get-url origin`); whether a pipeline deploys production (`.github/workflows`,
+  another CI's file, a deploy script), what triggers it, and which job or step deploys.
 - Which companies it relies on to run and reach people (step 4, `providers`): where it is hosted, what
   sits in front of it (a CDN, a proxy, a tunnel), who sends its mail, where its files or backups live,
   who holds its DNS and its domain. Look in deploy scripts, Dockerfiles and compose files, CI
@@ -71,7 +75,10 @@ localhost for `/ops/*` only, and say so.
   reads> [--app-url <where /ops/ answers, as the operator reaches it>]` instead: it writes the token
   (and the heartbeat settings) into that file without printing them, and registers the app with the
   operator, so no apps-file entry is needed. Do it first, before writing code: the link works once,
-  within a day. When production takes its settings from CI secrets or a host panel, copy them there
+  within a day. An operator that records deploys also writes `OPS_DEPLOY_TOKEN` and `OPS_DEPLOY_URL`
+  there (for the pipeline, step 7); if `connect` says it sent none, carry on without them. Do not add
+  `--ci github` yet: that changes the repo's CI secrets and waits for the owner's yes in step 7
+  (`connect --ci github --env <file>` works later without the link). When production takes its settings from CI secrets or a host panel, copy them there
   from that file without printing them (GitHub Actions: `grep '^OPS_TOKEN=' <file> | cut -d= -f2- |
   gh secret set OPS_TOKEN`). A used or old link: ask the owner for a new one from the operator's page.
 - Check `Authorization: Bearer <token>` with a constant-time compare on every `/ops/*` route; answer
@@ -83,7 +90,27 @@ localhost for `/ops/*` only, and say so.
 
 ## 3. Level 1: `GET /ops/health`
 
-Reply: `{ app, version, at, status, checks: [{ id, level, subject?, detail, data? }] }`.
+Reply: `{ app, version, commit?, deployed_at?, at, status, checks: [{ id, level, subject?, detail, data? }] }`.
+
+**What runs** (`version`, `commit`, `deployed_at`): the operator ties problems to releases with them.
+`commit` and `deployed_at` count toward no level, but add them whenever the build or deploy knows
+them (code in `reference/patterns.md`, "What runs"):
+
+- Read them from what the build or deploy **stamps**: an env var the host sets (Render
+  `RENDER_GIT_COMMIT`, Vercel `VERCEL_GIT_COMMIT_SHA`, Railway `RAILWAY_GIT_COMMIT_SHA`; check the
+  host's docs for the exact name), one the pipeline passes in (`GIT_SHA=${{ github.sha }}`, a Docker
+  `ARG` turned into `ENV`), or a small file the deploy writes next to the code (`REVISION` or
+  `build.json` with `{ "commit": "…", "deployed_at": "…" }`). If nothing stamps them yet, add the stamp
+  to the build or deploy you found in step 1 (a line in the deploy script or the Dockerfile), and say so.
+- Read them **once at start-up** in a long-running process, so they say what the process loaded, not
+  what is on disk now (a deploy that never restarted it is exactly what the operator wants to see). A
+  per-request runtime (PHP) reads the stamp file per request, since that is what runs.
+- `deployed_at`: the time the deploy stamped; else the process's start time. Not the build time of an
+  image deployed later, and never the request's own clock.
+- `version`: the release when there is one (`package.json` version, a tag the pipeline passes), else
+  the short commit. The deploy events of step 7 send the same value.
+- **Never guess.** No stamp and no way to add one (a site uploaded by hand): leave `commit` and
+  `deployed_at` out; the checker shows it as a hint only. Never run `git` from a request handler.
 
 Write checks for the things in step 1 that can be wrong **and that the app can judge itself**:
 
@@ -133,7 +160,7 @@ Rules (the ledger depends on them):
 
 ## 4. Level 2: `components` in `GET /ops/manifest`
 
-Manifest: `{ app, contract: "0.4", version, components, providers, context, tools, actions, operations? }`.
+Manifest: `{ app, contract: "0.5", version, components, providers, context, tools, actions, operations? }`.
 
 One component per part found in step 1:
 
@@ -148,6 +175,16 @@ One component per part found in step 1:
   public site or anything nothing else checks.
 - `description`: one line on what it does and what is normal for it.
 - `tech` (optional): what the part runs on, `[{ "name": "MySQL", "version": "5.7.44" }]`. See below.
+
+The manifest also takes `source` (optional, no level): where the code lives, so the operator links each
+commit and compares deploys. `"source": { "repo": "https://github.com/owner/name", "path": "backend" }`:
+
+- `repo`: the `https://` address of the remote from step 1, on any host. Turn an ssh remote
+  (`git@github.com:owner/name.git`) into its https form. **Strip any credential**: a remote often holds
+  one (`https://x-access-token:…@github.com/…`, `?private_token=…`); the checker reports it as an
+  error. If you find one, tell the owner it should be replaced, without repeating it.
+- `path`: only in a monorepo, the app's directory relative to the repo's root.
+- No remote: leave `source` out. Hardcode it like the components.
 
 Every component should be watched by something (checks, service, job, probe), except a store that
 its dependants' checks already cover. For each scheduled job, add the heartbeat call at the end of
@@ -290,17 +327,49 @@ Each action: `{ name, title, description, params?, risk, limit, rollback?, dry_r
 - Never an action that runs free text (shell, SQL, a URL to fetch). Params are values for one fixed
   operation. Prefer `dry_run: true` for every medium action, and a `rollback` action when one exists.
 
-## 7. Tests
+## 7. Deploy events (ask before touching CI)
+
+If a pipeline deploys production (step 1), it should tell the operator when a deploy starts and how it
+ends, so an investigation starts from the last change. Ask the owner first, in one message: "Your
+`<workflow file>` deploys production. May I add two steps that tell ops when a deploy starts and how it
+ends, and set `OPS_DEPLOY_TOKEN` and `OPS_DEPLOY_URL` as the repo's Actions secrets?" Without a yes,
+or without a pipeline, put the steps in your report instead.
+
+With a yes:
+
+1. Secrets: `npx -y opstead connect --ci github --env <the env file connect wrote> [--repo owner/name]`.
+   It runs `gh secret set` for both names from the file, printing neither; never copy a token by hand,
+   and never give CI `OPS_TOKEN`. No deploy token in the file (an older operator): skip the steps and
+   say so. Another CI: name the two secrets to set there from the file, never their values.
+2. Steps, in the job that deploys production, copied from the contract ("What changed and when",
+   `spec/CONTRACT.md`), with the app's name: one `STATUS: started` before the deploy, one last with
+   `if: always()` and `STATUS: ${{ job.status == 'success' && 'succeeded' || 'failed' }}`.
+   - **Production only.** If the workflow also runs for pull requests, other branches or staging, give
+     both steps the condition its deploy step has. Staging, previews and PR builds post nothing.
+   - **A failure at any step posts `failed`**, tests and build included. When tests and the deploy are
+     separate jobs, put the last step in its own job that `needs` all of them (the contract has its
+     `STATUS` line), since a failed test job skips the deploy job.
+   - **Never fail the deploy**: keep `-m 10`, `|| true`, and the early exit when the secrets are empty.
+   - `version`: the same value the health reply reports.
+3. A deploy script outside CI: add the contract's `tell_ops` shell function (`set -e`, `started`,
+   a `trap` that posts `failed`, `succeeded` at the end), with `OPS_DEPLOY_URL` and `OPS_DEPLOY_TOKEN`
+   read from where the script gets its settings.
+
+The steps run only on the next production deploy; do not start one to try them. Say in the report
+that the first deploy will show on the operator's timeline.
+
+## 8. Tests
 
 Add tests in the app's own framework for: the token (404 without it), each health check at ok and
-at its failing level, the manifest's ids and cross-references, each tool's param validation and
+at its failing level, `commit` and `deployed_at` read from the stamp (and left out without one), the
+manifest's ids and cross-references, each tool's param validation and
 read-only-ness, and for each action: 400, 409 on a failed precondition, dry run changes nothing,
 idempotency, the real run. Run the app's whole test suite.
 
-## 8. Verify with the checker
+## 9. Verify with the checker
 
 The checker only reads: it never calls tools or actions. Their 400, 409, dry run and idempotency are
-covered by the tests of step 7, so those tests are not optional.
+covered by the tests of step 8, so those tests are not optional.
 
 
 Start the app locally with `OPS_TOKEN` set and **the settings production uses** (the components and
@@ -314,13 +383,13 @@ npx -y opstead check http://127.0.0.1:<port> --token "$OPS_TOKEN"
 Fix every `error`. Fix each `warn` or say in your report why it stays. Repeat until it reports the
 target level. `--json` gives the same report for parsing. Stop the app afterwards by its PID.
 
-## 9. Register with the operator
+## 10. Register with the operator
 
 If you can reach the operator's apps file (the user says where), add the entry as
 `reference/operator.md` shows; otherwise put the entry in your report. A machine or website with no
-app of its own (a server, a hosted site) needs only that step: skip 0-8.
+app of its own (a server, a hosted site) needs only that step: skip 0-9.
 
-## 10. Report to the user
+## 11. Report to the user
 
 - The level reached and the checker's remaining warnings.
 - The checks, components, tools and actions added, one line each.
@@ -329,6 +398,10 @@ app of its own (a server, a hosted site) needs only that step: skip 0-8.
 - The providers declared, and where each came from (a file, or the owner's answer).
 - The `tech` of each part, and where each value came from (read at runtime, a lock file, an image
   tag); which versions could not be known.
+- Where `commit` and `deployed_at` come from (which env var or file, and what stamps it), or why they
+  are left out; the `source` declared.
+- Deploy events: the steps added and to which workflow and job, and whether the secrets are set; or,
+  without the owner's yes or a pipeline, the steps to add, as text.
 - Anything you guessed (a threshold, what is normal) and anything the repo did not tell you (URL,
   service name, deploy), as questions for the user.
 - Bugs found on the way, each in one line.

@@ -2,13 +2,14 @@
 // @ts-check
 import { readFileSync } from "node:fs";
 import { checkApp, LEVEL_NAMES } from "../lib/check.mjs";
-import { connect } from "../lib/connect.mjs";
+import { connect, setCiSecrets } from "../lib/connect.mjs";
 
 const HELP = `opstead: care for the apps you ship
 
 Usage:
   opstead check <url> [--token <token>] [--json]
-  opstead connect <enrol-link> [--env <file>] [--app-url <url>]
+  opstead connect <enrol-link> [--env <file>] [--app-url <url>] [--ci github [--repo <owner/name>]]
+  opstead connect --ci github [--env <file>] [--repo <owner/name>]
 
   Checks the app at <url> against the OPStead contract (/ops/health, /ops/manifest,
   /ops/metrics) and says which level it reaches:
@@ -23,9 +24,12 @@ Usage:
   --json   machine-readable report (for agents)
 
   connect  trades the one-time enrolment link from an operator's prompt for the app's token
-           and writes OPS_TOKEN (and HEARTBEAT_URL, HEARTBEAT_TOKEN) into the env file
-           (default .env), never printing them. --app-url tells the operator where the app
-           answers /ops/, as reachable from the operator.
+           and writes OPS_TOKEN (and HEARTBEAT_URL, HEARTBEAT_TOKEN, OPS_DEPLOY_TOKEN,
+           OPS_DEPLOY_URL) into the env file (default .env), never printing them. --app-url
+           tells the operator where the app answers /ops/, as reachable from the operator.
+           --ci github then sets OPS_DEPLOY_TOKEN and OPS_DEPLOY_URL as the repository's
+           Actions secrets with \`gh secret set\` (the repo of the current directory, or
+           --repo), from the env file, printing neither. Without a link it does only that.
 
 Exit code: 0 when nothing is wrong, 1 when something is, 2 when the app could not be checked.`;
 
@@ -48,18 +52,36 @@ if (json) args.splice(args.indexOf("--json"), 1);
 const token = flag("--token") ?? process.env.OPSTEAD_TOKEN ?? process.env.OPS_TOKEN;
 const envFile = flag("--env") ?? ".env";
 const appUrl = flag("--app-url");
+const ci = flag("--ci");
+const repo = flag("--repo");
 const [cmd, url] = args;
 
-if (cmd === "connect" && url) {
-  try {
-    const r = await connect(url, { env: envFile, appUrl });
-    console.log(`${r.name}: enrolled with the operator; wrote ${r.written.join(", ")} to ${envFile} (values not shown; keep the file out of git).`);
-    console.log(`The operator asks /ops/ at ${r.app_url ?? "(not set: give --app-url, or set it on the operator's page)"}.`);
-    process.exit(0);
-  } catch (e) {
-    console.error(`opstead connect: ${/** @type {Error} */ (e).message}`);
-    process.exit(2);
+if (cmd === "connect" && (url || ci)) {
+  let deploy = true;
+  if (url) {
+    try {
+      const r = await connect(url, { env: envFile, appUrl });
+      deploy = r.deploy;
+      console.log(`${r.name}: enrolled with the operator; wrote ${r.written.join(", ")} to ${envFile} (values not shown; keep the file out of git).`);
+      console.log(`The operator asks /ops/ at ${r.app_url ?? "(not set: give --app-url, or set it on the operator's page)"}.`);
+      if (!deploy) console.log("The operator sent no deploy token (it predates deploy events): everything else works. Once the operator is updated, a new enrolment link from this app's page there gives one.");
+    } catch (e) {
+      console.error(`opstead connect: ${/** @type {Error} */ (e).message}`);
+      process.exit(2);
+    }
   }
+  if (ci && !deploy) console.log(`--ci ${ci}: skipped, there is no deploy token to set.`);
+  else if (ci) {
+    try {
+      const set = setCiSecrets({ env: envFile, ci, repo });
+      console.log(`Set ${set.join(" and ")} as Actions secrets${repo ? ` of ${repo}` : " of this directory's repository"} (values not shown).`);
+    } catch (e) {
+      console.error(`opstead connect: ${/** @type {Error} */ (e).message}`);
+      if (url) console.error(`The env file is written; to try the secrets again: npx opstead connect --ci ${ci} --env ${envFile}${repo ? ` --repo ${repo}` : ""}`);
+      process.exit(2);
+    }
+  }
+  process.exit(0);
 }
 
 if (cmd !== "check" || !url || args.includes("--help") || args.includes("-h")) {

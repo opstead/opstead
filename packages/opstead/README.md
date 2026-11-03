@@ -35,6 +35,17 @@ The link works once, within a day. `--app-url` is where the app answers `/ops/` 
 the operator. When production takes its settings from CI secrets rather than that file, copy them
 there from the file without printing them, e.g. `grep '^OPS_TOKEN=' .env | cut -d= -f2- | gh secret set OPS_TOKEN`.
 
+An operator that records deploys also hands out a **deploy token**, the app's own, which can only post
+deploy events. `connect` writes it as `OPS_DEPLOY_TOKEN` (with `OPS_DEPLOY_URL`), and with
+`--ci github` puts both into the repository's Actions secrets through `gh`, printing neither, so the
+production pipeline can tell the operator when a deploy starts and how it ends (the steps are in the
+contract, "What changed and when"). CI never gets `OPS_TOKEN`.
+
+```bash
+npx opstead connect https://ops-hook.example/enrol/<code> --env .env --ci github
+npx opstead connect --ci github --env .env --repo owner/name   # again later, from the env file
+```
+
 ## The levels
 
 | Level | The app serves | What an operator can then do |
@@ -46,12 +57,19 @@ there from the file without printing them, e.g. `grep '^OPS_TOKEN=' .env | cut -
 
 All routes are under `/ops/` behind one bearer token. `GET /ops/metrics` (Prometheus text) is optional.
 
+Beside the levels, and counting toward none: `commit` and `deployed_at` in the health reply (what
+runs, as the build or deploy stamped it), `source` in the manifest (`{repo, path?}`, an https address
+with no credential in it), and deploy events from the production pipeline. `check` reports the first
+two when present, and an error for a credential in `source`.
+
 ### A health reply
 
 ```json
 {
   "app": "shop",
-  "version": "3c49e78",
+  "version": "1.4.2",
+  "commit": "3c49e78d0b6f2a1e9c5d4b7a8f0e1d2c3b4a5f6e",
+  "deployed_at": "2026-11-01T09:12:40Z",
   "status": "warn",
   "checks": [
     { "id": "db", "level": "ok" },
