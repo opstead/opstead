@@ -1,6 +1,6 @@
 {
   "app": "shop",
-  "contract": "0.3",
+  "contract": "0.4",
   "version": "3c49e78",
   "context": "Sells garden tools in Canada. Every hour the price sync pulls from three suppliers; Supplier A answers 403 for a few minutes after midnight UTC while it rebuilds, which is normal. Orders are low on weekends.",
   "components": [
@@ -9,6 +9,12 @@
       "name": "API",
       "kind": "service",
       "service": "shop-api",
+      "tech": [
+        {
+          "name": "Node.js",
+          "version": "22.11.0"
+        }
+      ],
       "depends_on": [
         "db",
         "payments"
@@ -22,7 +28,13 @@
     {
       "id": "db",
       "name": "Postgres",
-      "kind": "store"
+      "kind": "store",
+      "tech": [
+        {
+          "name": "PostgreSQL",
+          "version": "16.4"
+        }
+      ]
     },
     {
       "id": "sync",

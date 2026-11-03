@@ -1,5 +1,12 @@
 # Contract changes
 
+## 0.4 (2026-11-03)
+
+- **Tech**: a component may declare `tech`, what it runs on: `[{ "name": "MySQL", "version": "5.7.44" }]`,
+  the product as people call it and the version as precisely as the running thing reports it (left
+  out when unknown). An operator shows it on the map and warns before a product's end of support.
+  Optional, raises no level; additive, so a 0.3 manifest is a valid 0.4 one.
+
 ## 0.3 (2026-11-03)
 
 - **Providers**: the manifest declares `providers`, the companies the app relies on to run and to

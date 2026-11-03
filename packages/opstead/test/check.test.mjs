@@ -156,3 +156,38 @@ describe("providers", () => {
     assert.match(NEXT[1], /providers/);
   });
 });
+
+describe("tech", () => {
+  const fetchWith = (m) => app({ "/ops/health": health, "/ops/manifest": m });
+  const withTech = (db, api) => ({ ...manifest, components: [{ ...manifest.components[0], tech: api }, { ...manifest.components[1], tech: db }, manifest.components[2]] });
+
+  it("counts the parts that declare it, and is optional", async () => {
+    const r = await checkApp("https://shop.example", { token: "t", fetch: fetchWith(withTech([{ name: "MySQL", version: "5.7.44" }], [{ name: "PHP", version: "8.4" }, { name: "Apache" }])) });
+    assert.equal(r.level, 4);
+    assert.equal(r.tech, 2);
+    assert.ok(has(r.findings, { level: "ok", where: "manifest.components", message: "2 of 3 parts declare what they run (tech)" }));
+    const none = await checkApp("https://shop.example", { token: "t", fetch: fetchWith(manifest) });
+    assert.equal(none.tech, 0);
+    assert.equal(none.level, 4);
+  });
+
+  it("a malformed entry warns and costs no level", async () => {
+    for (const [db, where] of [
+      [{ name: "MySQL" }, "manifest.components[db].tech"],
+      [[{ version: "5.7" }], "manifest.components[db].tech[0]"],
+      [[{ name: " " }], "manifest.components[db].tech[0]"],
+      [["MySQL"], "manifest.components[db].tech[0]"],
+      [[{ name: "MySQL", version: 5.7 }], "manifest.components[db].tech[MySQL].version"],
+    ]) {
+      const r = await checkApp("https://shop.example", { token: "t", fetch: fetchWith(withTech(db, undefined)) });
+      assert.equal(r.level, 4, JSON.stringify(db));
+      assert.equal(r.tech, 0, JSON.stringify(db));
+      assert.ok(has(r.findings, { level: "warn", where }), `${JSON.stringify(db)}: ${JSON.stringify(r.findings)}`);
+    }
+  });
+
+  it("the spec's example declares it", () => {
+    const m = JSON.parse(readFileSync(new URL("../../../spec/examples/manifest.json", import.meta.url), "utf8"));
+    assert.equal(validateManifest(m, new Set()).has.tech, 2);
+  });
+});

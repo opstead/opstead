@@ -18,7 +18,7 @@ const OPERATOR_CHECKS = ["service_down", "heartbeat_missed", "job_failed", "http
 const LIMIT = /^\d+\s*\/\s*\d+\s*(?:ms|s|m|h|d)$/;
 
 /** @typedef {{ level: "error" | "warn" | "ok", where: string, message: string }} Finding */
-/** @typedef {{ url: string, app?: string, level: number, findings: Finding[], metrics?: boolean, next?: string }} Report */
+/** @typedef {{ url: string, app?: string, level: number, findings: Finding[], metrics?: boolean, next?: string, tech?: number }} Report */
 
 const isObj = (/** @type {unknown} */ v) => typeof v === "object" && v !== null && !Array.isArray(v);
 const isStr = (/** @type {unknown} */ v) => typeof v === "string" && v.trim() !== "";
@@ -82,13 +82,13 @@ function validateParams(params, at, out) {
 /**
  * @param {unknown} body
  * @param {Set<string>} healthIds the check ids /ops/health reported now
- * @returns {{ findings: Finding[], has: { components: boolean, hosting: boolean, knowledge: boolean, actions: boolean }, errorsAt: { 2: boolean, 3: boolean, 4: boolean } }}
+ * @returns {{ findings: Finding[], has: { components: boolean, hosting: boolean, knowledge: boolean, actions: boolean, tech: number }, errorsAt: { 2: boolean, 3: boolean, 4: boolean } }}
  */
 export function validateManifest(body, healthIds) {
   /** @type {Finding[]} */
   const out = [];
   const errorsAt = { 2: false, 3: false, 4: false };
-  const has = { components: false, hosting: false, knowledge: false, actions: false };
+  const has = { components: false, hosting: false, knowledge: false, actions: false, tech: 0 };
   const add = (/** @type {2|3|4} */ lv, /** @type {"error"|"warn"} */ level, where, message) => {
     out.push({ level, where, message });
     if (level === "error") errorsAt[lv] = true;
@@ -130,7 +130,17 @@ export function validateManifest(body, healthIds) {
       if (!watched && c.kind !== "store") add(2, "warn", at, "nothing watches it: no checks, service, job or probe; it shows as not watched");
       if (c.probe && !isStr(c.url)) add(2, "error", `${at}.probe`, "needs a url to open");
       if (c.url !== undefined && !isStr(c.url)) add(2, "error", `${at}.url`, "must be a URL");
+      // What the part runs on; optional, so a bad entry warns and never costs a level.
+      if (c.tech === undefined) return;
+      if (!Array.isArray(c.tech)) return add(2, "warn", `${at}.tech`, 'must be an array of {name, version?}, e.g. [{"name": "MySQL", "version": "8.0.36"}]');
+      const n = out.length;
+      c.tech.forEach((t, j) => {
+        if (!isObj(t) || !isStr(t.name)) return add(2, "warn", `${at}.tech[${j}]`, 'needs a name: the product as people call it ("PostgreSQL", "Node.js")');
+        if (t.version !== undefined && !isStr(t.version)) add(2, "warn", `${at}.tech[${t.name}].version`, 'must be a string ("16.4"); leave it out when it is not known');
+      });
+      if (out.length === n && c.tech.length) has.tech++;
     });
+    if (has.tech) out.push({ level: "ok", where: "manifest.components", message: `${has.tech} of ${comps.length} part${comps.length > 1 ? "s" : ""} declare${has.tech > 1 ? "" : "s"} what ${has.tech > 1 ? "they run" : "it runs"} (tech)` });
     if (unseen.size) {
       const list = [...unseen];
       add(2, "warn", "manifest.components", `${list.length} check id${list.length > 1 ? "s" : ""} named here ${list.length > 1 ? "are" : "is"} not in /ops/health right now (${list.slice(0, 8).join(", ")}${list.length > 8 ? ", …" : ""}): fine if reported only when failing; reporting them as ok shows the owner they are watched, and catches a misspelt id`);
@@ -289,6 +299,8 @@ export async function checkApp(url, opts = {}) {
   let manifest;
   /** @type {string | undefined} */
   let next;
+  /** @type {number | undefined} */
+  let tech;
   try {
     const res = await get("/ops/manifest");
     if (res.ok) manifest = await res.json().catch(() => null);
@@ -299,6 +311,7 @@ export async function checkApp(url, opts = {}) {
   if (manifest !== undefined) {
     const m = validateManifest(manifest, h.ids);
     findings.push(...m.findings);
+    tech = m.has.tech;
     if (isObj(manifest) && Array.isArray(manifest.operations) && manifest.operations.length) {
       const runs = await get("/ops/runs?limit=5").then(async (r) => (r.ok ? r.json().catch(() => null) : r.status), () => 0);
       const bad = validateRuns(runs);
@@ -312,7 +325,7 @@ export async function checkApp(url, opts = {}) {
     if (level >= 3 && m.has.actions && !m.errorsAt[4]) level = 4;
     if (level === 1 && m.has.components && !m.has.hosting) next = "Declare where the app runs in the manifest's providers: at least one hosting provider (the company, or \"self\" for one of the operator's machines).";
   }
-  return { url: base, app, level, findings, metrics, next: next ?? (NEXT[level] || undefined) };
+  return { url: base, app, level, findings, metrics, next: next ?? (NEXT[level] || undefined), tech };
 }
 
 export const LEVEL_NAMES = ["none", "health", "shape", "knowledge", "hands"];

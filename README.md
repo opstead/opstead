@@ -17,7 +17,7 @@ Early. What is here now:
 
 | Piece | State |
 |---|---|
-| [The contract](spec/CONTRACT.md), version 0.3, with [JSON Schemas](spec/schema) and [examples](spec/examples) | written |
+| [The contract](spec/CONTRACT.md), version 0.4, with [JSON Schemas](spec/schema) and [examples](spec/examples) | written |
 | [`opstead check`](packages/opstead) | on npm: tells you how far an app follows the contract |
 | [An agent skill](skill/opstead/SKILL.md) that adds the contract to an app (Claude Code, Codex) | written; tried on a sample app (level 3 with no hand edits) |
 | The operator (ledger, notices, AI investigation, approvals, map) | runs privately; to be opened here once it no longer depends on one setup |

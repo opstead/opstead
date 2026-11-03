@@ -40,7 +40,7 @@ there from the file without printing them, e.g. `grep '^OPS_TOKEN=' .env | cut -
 | Level | The app serves | What an operator can then do |
 |---|---|---|
 | 1 health | `GET /ops/health`: `{app, version, status, checks: [{id, level, subject?, detail, data?}]}` | one problem per thing that is wrong (`id` + `subject`), told once per change |
-| 2 shape | `GET /ops/manifest` with `components`: `{id, kind, depends_on, checks}`, and `providers` with at least the `hosting` one: `{kind, name, what?, serves?}` | a map of the app; the AI knows where a problem sits, and a host's or edge's trouble is told above the parts it serves |
+| 2 shape | `GET /ops/manifest` with `components`: `{id, kind, depends_on, checks, tech?}`, and `providers` with at least the `hosting` one: `{kind, name, what?, serves?}` | a map of the app; the AI knows where a problem sits, and a host's or edge's trouble is told above the parts it serves; with `tech` (optional), what each part runs and when its version loses support |
 | 3 knowledge | `context` and read-only `tools` in the manifest | the AI investigates with the app's own data and knows what is normal |
 | 4 hands | `actions` with `risk`, `limit`, `rollback`, `dry_run`; `POST /ops/actions/<name>` | the AI proposes fixes; low risk runs, medium asks you, high never; the app re-checks its preconditions and answers 409 when they do not hold |
 

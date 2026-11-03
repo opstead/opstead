@@ -133,7 +133,7 @@ Rules (the ledger depends on them):
 
 ## 4. Level 2: `components` in `GET /ops/manifest`
 
-Manifest: `{ app, contract: "0.3", version, components, providers, context, tools, actions, operations? }`.
+Manifest: `{ app, contract: "0.4", version, components, providers, context, tools, actions, operations? }`.
 
 One component per part found in step 1:
 
@@ -147,6 +147,7 @@ One component per part found in step 1:
   watch that it runs. `job`: the heartbeat name of a scheduled job. `url` + `probe: true` for the
   public site or anything nothing else checks.
 - `description`: one line on what it does and what is normal for it.
+- `tech` (optional): what the part runs on, `[{ "name": "MySQL", "version": "5.7.44" }]`. See below.
 
 Every component should be watched by something (checks, service, job, probe), except a store that
 its dependants' checks already cover. For each scheduled job, add the heartbeat call at the end of
@@ -157,6 +158,26 @@ should have); items that failed inside a run that worked belong in a health chec
 
 An `external`'s `url` is its public address only: never a URL from config that may hold a key or a
 token. Until level 4, leave `actions` out of the manifest (or send `[]`).
+
+### `tech`
+
+The operator shows what each part runs and warns before its version loses support, so fill it for
+the parts whose runtime the app can see: the database, the language runtime, the web server.
+
+- `name`: the product as people call it (`MySQL`, `MariaDB`, `PostgreSQL`, `PHP`, `Node.js`,
+  `Python`, `Redis`, `nginx`, `Apache`, `Ubuntu`). Tell MariaDB from MySQL by the running version
+  string (`10.11.6-MariaDB`), not by the driver name.
+- `version`: read it from the running thing, in the manifest handler, so it stays true after an
+  upgrade: `SELECT VERSION()` (MySQL, MariaDB, PostgreSQL: `SHOW server_version` for the bare
+  number), `INFO server` → `redis_version`, `PHP_VERSION`, `process.version` (drop the `v`),
+  `platform.python_version()`, `$_SERVER['SERVER_SOFTWARE']` when it shows one. Cache a database's
+  answer for the process's life; if the query fails, leave `version` out rather than fail the manifest.
+- Only when the running value cannot be read (a web server that hides its version, an OS), take it
+  from a lock file, `.nvmrc`, `engines`, or a Dockerfile's `FROM` tag, and keep only the precision it
+  really gives (`FROM node:22-alpine` is `"22"`).
+- **Never guess a version.** No source: write `{ "name": "Apache" }` without one. A part whose
+  product is not known gets no `tech`.
+- In the report, name where each value came from (`SELECT VERSION()` at runtime, `Dockerfile FROM`).
 
 ### `providers`
 
@@ -306,6 +327,8 @@ app of its own (a server, a hosted site) needs only that step: skip 0-8.
 - What the operator needs: the app's base URL, that `OPS_TOKEN` must be in the server's environment
   (never its value), the services to watch, each job with how often it runs.
 - The providers declared, and where each came from (a file, or the owner's answer).
+- The `tech` of each part, and where each value came from (read at runtime, a lock file, an image
+  tag); which versions could not be known.
 - Anything you guessed (a threshold, what is normal) and anything the repo did not tell you (URL,
   service name, deploy), as questions for the user.
 - Bugs found on the way, each in one line.

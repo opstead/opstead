@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/manifest.schema.json",
   "title": "GET /ops/manifest",
-  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.3, levels 2-4). Cross-references (depends_on and serves ids, rollback names) and the hosting provider level 2 needs are checked by `opstead check`, not by this schema.",
+  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.4, levels 2-4). Cross-references (depends_on and serves ids, rollback names) and the hosting provider level 2 needs are checked by `opstead check`, not by this schema.",
   "type": "object",
   "properties": {
     "app": {
@@ -153,6 +153,29 @@
         },
         "group": {
           "type": "string"
+        },
+        "tech": {
+          "type": "array",
+          "description": "What the part runs on, read from the running thing where possible. Optional; raises no level.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S",
+                "description": "The product as commonly named: MySQL, PostgreSQL, PHP, Node.js, nginx, Ubuntu."
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1,
+                "description": "As precise as known (SELECT VERSION(), PHP_VERSION, process.version); omitted when unknown."
+              }
+            }
+          }
         }
       },
       "if": {

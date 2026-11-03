@@ -1,4 +1,4 @@
-# The OPStead contract, version 0.3
+# The OPStead contract, version 0.4
 
 What an app serves about itself so that an operator (OPStead, or anything else that reads this) can
 watch it, place a problem in it, investigate it and, within limits the app sets, fix it.
@@ -114,7 +114,7 @@ code changes, not from request to request.
 ```
 
 Manifest fields at this level: `app` (SHOULD), `contract` (SHOULD: the version of this document the
-app follows, `"0.3"`), `version` (MAY), `components` (MUST for level 2), `providers` (MUST for level 2,
+app follows, `"0.4"`), `version` (MAY), `components` (MUST for level 2), `providers` (MUST for level 2,
 with at least one `hosting` entry).
 
 Each component:
@@ -133,9 +133,28 @@ Each component:
 | `job` | MAY | The heartbeat name of a scheduled job (see Heartbeats). The operator attaches `heartbeat_missed` and `job_failed`. |
 | `app` | MAY | On an `external`: the name of another app the same operator watches. The arrow goes to that app instead of a second box. |
 | `group` | MAY | Externals with the same group are drawn as one block until opened ("Job boards"). |
+| `tech` | MAY | What the part runs on: `[{ "name": "MySQL", "version": "5.7.44" }]`. See below. |
 
 A component with no `checks`, `service`, `job`, `probe` or `app` shows as *not watched*; that is
 allowed (a `store` often is) but is worth a look.
+
+#### `tech`
+
+What a part runs on: its database, runtime, web server, OS. The operator shows it on the map and
+warns before a product reaches its end of support (and after), so an old MySQL is a notice months
+ahead rather than a surprise when the host turns it off.
+
+```json
+{ "id": "db", "name": "Database", "kind": "store", "tech": [{ "name": "MySQL", "version": "5.7.44" }] },
+{ "id": "api", "kind": "service", "tech": [{ "name": "PHP", "version": "8.4.1" }, { "name": "Apache", "version": "2.4" }] }
+```
+
+| Field | | |
+|---|---|---|
+| `name` | MUST | The product as people call it: `MySQL`, `MariaDB`, `PostgreSQL`, `PHP`, `Node.js`, `Python`, `Redis`, `nginx`, `Apache`, `Ubuntu`. |
+| `version` | MAY | As precise as known, read from the running thing where it can be (`SELECT VERSION()`, `PHP_VERSION`, `process.version`); from a lock file or a base image only when the running value cannot be read. Left out when unknown, never guessed. |
+
+`tech` is optional and raises no level. A malformed entry is a warning, not an error.
 
 ### `providers`
 
@@ -361,7 +380,7 @@ configuration how often each job should run, and opens `heartbeat_missed` when a
 
 ## Versioning
 
-This document is `0.3`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
+This document is `0.4`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
 minor version and is listed in [`CHANGES.md`](CHANGES.md). Operators ignore fields they do not know;
 apps ignore body fields they do not know.
 
