@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/manifest.schema.json",
   "title": "GET /ops/manifest",
-  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.2, levels 2-4). Cross-references (depends_on ids, rollback names) are checked by `opstead check`, not by this schema.",
+  "description": "What the app is made of, what is normal, what may be looked at and what may be done (OPStead contract 0.3, levels 2-4). Cross-references (depends_on and serves ids, rollback names) and the hosting provider level 2 needs are checked by `opstead check`, not by this schema.",
   "type": "object",
   "properties": {
     "app": {
@@ -19,6 +19,13 @@
       "type": "array",
       "items": {
         "$ref": "#/definitions/component"
+      }
+    },
+    "providers": {
+      "type": "array",
+      "description": "The companies the app relies on to run and to reach people. Level 2 needs a hosting one.",
+      "items": {
+        "$ref": "#/definitions/provider"
       }
     },
     "context": {
@@ -279,6 +286,48 @@
               }
             }
           }
+        }
+      }
+    },
+    "provider": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "hosting",
+            "edge",
+            "dns",
+            "mail",
+            "storage",
+            "registrar"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "The company, or \"self\" for one of the operator's own machines."
+        },
+        "what": {
+          "type": "string",
+          "minLength": 1
+        },
+        "serves": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Component ids that need it; omitted: every part."
+        },
+        "status_url": {
+          "type": "string",
+          "pattern": "^https?://",
+          "description": "A Statuspage-shaped /api/v2/status.json, for a company the operator does not know."
         }
       }
     }

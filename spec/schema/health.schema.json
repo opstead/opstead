@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/opstead/opstead/main/spec/schema/health.schema.json",
   "title": "GET /ops/health",
-  "description": "The app's own judgement of itself (OPStead contract 0.2, level 1).",
+  "description": "The app's own judgement of itself (OPStead contract 0.3, level 1).",
   "type": "object",
   "required": [
     "checks"

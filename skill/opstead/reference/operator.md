@@ -64,6 +64,9 @@ and the manifest's `job` fields.
   or no provider: the hosts are only probed from outside (status, body, speed, certificate, DNS).
 - A name that should be listed but not opened (behind a login, someone else's) gets `"watch": false`
   and a `note`.
+- `providers`, as in a manifest (`[{ "kind": "hosting", "name": "IONOS" }, …]`): who hosts the site,
+  sends its mail, holds its DNS. Same rule: from what you can see or the owner says, never guessed. An
+  app of the site's name adds its own.
 
 ## Notices and login (env file)
 

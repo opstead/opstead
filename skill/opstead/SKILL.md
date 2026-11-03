@@ -19,7 +19,7 @@ does**, not to add generic monitoring.
 | Level | Adds | Default |
 |---|---|---|
 | 1 health | `GET /ops/health` | always |
-| 2 shape | `components` in `GET /ops/manifest` | always |
+| 2 shape | `components` and `providers` (at least `hosting`) in `GET /ops/manifest` | always |
 | 3 knowledge | `context`, read-only `tools` | always |
 | 4 hands | `actions` that change things | only with the user's yes, action by action |
 
@@ -44,6 +44,11 @@ Read enough of the app to answer, and keep the answers in your head for every la
   those are the candidate actions.
 - How it is configured (env file, secrets) and deployed, and which processes share that config (a
   server and a cron job often do not).
+- Which companies it relies on to run and reach people (step 4, `providers`): where it is hosted, what
+  sits in front of it (a CDN, a proxy, a tunnel), who sends its mail, where its files or backups live,
+  who holds its DNS and its domain. Look in deploy scripts, Dockerfiles and compose files, CI
+  workflows, IaC (Terraform, `fly.toml`, `vercel.json`, `netlify.toml`, `wrangler.toml`, `app.yaml`),
+  SMTP or mail-API settings, storage SDKs and bucket names, and DNS or hosting notes in the docs.
 
 What the repo does not tell you (the public URL, the service name it runs under, how it is deployed,
 how often a job runs in production), do not invent: leave it out of the manifest and list it as a
@@ -128,7 +133,7 @@ Rules (the ledger depends on them):
 
 ## 4. Level 2: `components` in `GET /ops/manifest`
 
-Manifest: `{ app, contract: "0.2", version, components, context, tools, actions, operations? }`.
+Manifest: `{ app, contract: "0.3", version, components, providers, context, tools, actions, operations? }`.
 
 One component per part found in step 1:
 
@@ -152,6 +157,37 @@ should have); items that failed inside a run that worked belong in a health chec
 
 An `external`'s `url` is its public address only: never a URL from config that may hold a key or a
 token. Until level 4, leave `actions` out of the manifest (or send `[]`).
+
+### `providers`
+
+Level 2 also needs the companies the app runs on and reaches people through, at least the `hosting`
+one. The operator draws each company once for every app that names it, watches its status page, and
+tells its trouble above the parts it serves; when the app moves host, this is what changes the checks.
+
+```json
+"providers": [
+  { "kind": "hosting", "name": "IONOS", "what": "shared hosting: Apache, PHP, MySQL" },
+  { "kind": "mail", "name": "IONOS", "serves": ["contact"] },
+  { "kind": "edge", "name": "Cloudflare" }
+]
+```
+
+- `kind`: `hosting`, `edge` (CDN, proxy, tunnel), `dns`, `mail`, `storage`, `registrar`.
+- `name`: the company as people call it; `"self"` for hosting on the operator's own machine (a launchd
+  or systemd service there, a container on it).
+- `what`: one line, optional. `serves`: the component ids that need it, optional; omit it when every
+  part does (hosting usually), name them when only some do (mail for the contact form).
+- `status_url`: optional, a Statuspage-shaped `…/api/v2/status.json` for a company an operator is
+  unlikely to know (it knows the big ones).
+- **Never guess a company.** Write one only when the code or the deploy config shows it (a
+  `fly.toml` is Fly.io; an SMTP host `smtp.ionos.com` is IONOS mail; a `wrangler.toml` is Cloudflare;
+  a launchd plist or systemd unit deployed to the operator's machine is `self`). A domain alone does not
+  tell who hosts it. Whatever the repo does not show, ask the owner before writing it, one short
+  question per gap ("Where does this run in production: which company, or one of your own machines?",
+  "Who holds the DNS for example.com?"). If the owner does not know the hosting either, stop at level 1
+  for this app and say why; leave out the other kinds rather than guess them.
+- Leave out a kind the app does not use (no mail sent: no `mail`).
+- Hardcode them in the manifest like the components: they change with the deploy, not per request.
 
 ## 5. Level 3: `context` and `tools`
 
@@ -269,6 +305,7 @@ app of its own (a server, a hosted site) needs only that step: skip 0-8.
 - The checks, components, tools and actions added, one line each.
 - What the operator needs: the app's base URL, that `OPS_TOKEN` must be in the server's environment
   (never its value), the services to watch, each job with how often it runs.
+- The providers declared, and where each came from (a file, or the owner's answer).
 - Anything you guessed (a threshold, what is normal) and anything the repo did not tell you (URL,
   service name, deploy), as questions for the user.
 - Bugs found on the way, each in one line.

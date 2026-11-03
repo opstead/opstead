@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { checkApp, validateHealth, validateManifest } from "../lib/check.mjs";
+import { checkApp, NEXT, validateHealth, validateManifest } from "../lib/check.mjs";
 
 const health = { app: "shop", version: "1", status: "warn", checks: [{ id: "db", level: "ok" }, { id: "stale", level: "warn", subject: "a", detail: "3 stale", data: { n: 3 } }] };
 const manifest = {
@@ -12,6 +12,7 @@ const manifest = {
     { id: "db", kind: "store" },
     { id: "site", kind: "ui", url: "https://shop.example", probe: true, depends_on: ["api"] },
   ],
+  providers: [{ kind: "hosting", name: "self" }, { kind: "edge", name: "Cloudflare", serves: ["site"] }],
   tools: [{ name: "stale_products", description: "Products not updated in 24 h", params: { limit: { type: "number" } } }],
   actions: [
     { name: "disable_product", description: "Hide a product", risk: "medium", limit: "30/1d", rollback: "enable_product", dry_run: true, params: { id: { type: "uuid", required: true } } },
@@ -74,7 +75,7 @@ describe("opstead check", () => {
 
 describe("0.1 details", () => {
   it("warns on a missing contract, launchd, a 401 without the token, and ids that are not snake_case", async () => {
-    const m = { ...manifest, contract: undefined, components: [{ id: "owner-page", kind: "service", launchd: "x.y", checks: [{ id: "db" }] }] };
+    const m = { ...manifest, contract: undefined, components: [{ id: "owner-page", kind: "service", launchd: "x.y", checks: [{ id: "db" }] }], providers: [{ kind: "hosting", name: "self" }] };
     const unauth = (async (url, init) => (init?.headers?.authorization === "Bearer t" ? app({ "/ops/health": health, "/ops/manifest": m })(url, init) : new Response("", { status: 401 })));
     const r = await checkApp("https://shop.example", { token: "t", fetch: unauth });
     for (const where of ["manifest.contract", "manifest.components[owner-page].id", "manifest.components[owner-page].launchd", "auth"]) assert.ok(has(r.findings, { level: "warn", where }), where);
@@ -103,5 +104,55 @@ describe("the spec's examples", () => {
     const r = await checkApp("https://shop.example", { token: "t", fetch: app({ "/ops/health": read("health.json"), "/ops/manifest": read("manifest.json"), "/ops/runs": read("runs.json") }) });
     assert.deepEqual(r.findings.filter((f) => f.level === "error"), []);
     assert.equal(r.level, 4);
+  });
+});
+
+describe("providers", () => {
+  const fetchWith = (m) => app({ "/ops/health": health, "/ops/manifest": m });
+
+  it("level 2 needs a hosting provider, and the report says so", async () => {
+    const r = await checkApp("https://shop.example", { token: "t", fetch: fetchWith({ ...manifest, providers: [{ kind: "edge", name: "Cloudflare" }] }) });
+    assert.equal(r.level, 1);
+    assert.ok(has(r.findings, { level: "error", where: "manifest.providers" }));
+    assert.match(r.next, /hosting provider/);
+    const none = await checkApp("https://shop.example", { token: "t", fetch: fetchWith({ ...manifest, providers: undefined }) });
+    assert.equal(none.level, 1);
+    assert.match(none.findings.find((f) => f.where === "manifest.providers").message, /no hosting provider/);
+  });
+
+  it("names unknown kinds, empty names, bad serves ids and status urls", () => {
+    const comps = [{ id: "site", kind: "ui", url: "https://x.example", probe: true }];
+    const providers = [
+      { kind: "hosting", name: "IONOS", serves: ["site", "nope"] },
+      { kind: "cdn", name: "Cloudflare" },
+      { kind: "mail", name: " " },
+      { kind: "dns", name: "IONOS", serves: "site" },
+      { kind: "storage", name: "Bucketco", status_url: "status.bucketco.example" },
+    ];
+    const { findings, errorsAt, has: got } = validateManifest({ components: comps, providers }, new Set());
+    assert.equal(errorsAt[2], true);
+    assert.equal(got.hosting, false);
+    const where = findings.filter((f) => f.level === "error").map((f) => f.where);
+    for (const want of ["manifest.providers[hosting · IONOS].serves", "manifest.providers[cdn · Cloudflare].kind", "manifest.providers[mail].name", "manifest.providers[dns · IONOS].serves", "manifest.providers[storage · Bucketco].status_url"]) assert.ok(where.includes(want), want);
+    assert.match(findings.find((f) => f.where === "manifest.providers[hosting · IONOS].serves").message, /"nope" is not a component id/);
+    // An invalid hosting entry is reported once, not again as missing.
+    assert.ok(!where.includes("manifest.providers"));
+  });
+
+  it("accepts the fields ops reads, with serves omitted meaning every part", () => {
+    const providers = [
+      { kind: "hosting", name: "IONOS", what: "shared hosting: Apache, PHP, MySQL" },
+      { kind: "mail", name: "IONOS", serves: ["site"] },
+      { kind: "edge", name: "Cloudflare" },
+      { kind: "registrar", name: "Namegood", status_url: "https://status.namegood.example/api/v2/status.json" },
+    ];
+    const { findings, errorsAt, has: got } = validateManifest({ components: [{ id: "site", kind: "ui", url: "https://x.example", probe: true }], providers }, new Set());
+    assert.equal(errorsAt[2], false, JSON.stringify(findings));
+    assert.equal(got.hosting, true);
+  });
+
+  it("must be an array; the next step for level 1 mentions it", () => {
+    assert.equal(validateManifest({ components: manifest.components, providers: { kind: "hosting" } }, new Set()).errorsAt[2], true);
+    assert.match(NEXT[1], /providers/);
   });
 });

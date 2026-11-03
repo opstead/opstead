@@ -28,6 +28,8 @@ it("the usual mistakes fail", () => {
   assert.notEqual(valid("manifest", { actions: [{ name: "go", description: "d", risk: "low", limit: "often" }] }), true, "a limit without a shape");
   assert.notEqual(valid("manifest", { components: [{ id: "s", kind: "ui", probe: true }] }), true, "a probe without a url");
   assert.notEqual(valid("manifest", { components: [{ id: "s", kind: "server" }] }), true, "an unknown kind");
+  assert.notEqual(valid("manifest", { providers: [{ kind: "cdn", name: "Cloudflare" }] }), true, "an unknown provider kind");
+  assert.notEqual(valid("manifest", { providers: [{ kind: "hosting", name: "" }] }), true, "a provider without a name");
   assert.notEqual(valid("action-reply", { error: "x", result: "y" }), true, "an error that also claims a result");
   assert.notEqual(valid("runs", { runs: [{ operation: "search", at: "2026-11-01T12:00:00Z", units: "88", s: 3, ok: true }] }), true, "units as a string");
 });

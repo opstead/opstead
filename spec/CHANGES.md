@@ -1,5 +1,15 @@
 # Contract changes
 
+## 0.3 (2026-11-03)
+
+- **Providers**: the manifest declares `providers`, the companies the app relies on to run and to
+  reach people (`kind`: `hosting`, `edge`, `dns`, `mail`, `storage`, `registrar`; `name`; optional
+  `what`, `serves`, `status_url`). An operator draws each company once, shared by every app that names
+  it, watches its status page, and tells its trouble above the parts it serves in one notice; moving
+  host changes what is checked. **Level 2 now needs a `hosting` provider** besides `components`, so
+  an app that was level 2 or above under 0.2 is level 1 until it declares one (`"name": "self"` for
+  the operator's own machine).
+
 ## 0.2, additions (2026-11-01)
 
 - Actions get `title` (SHOULD): a few plain words for the owner, since `description` is written for

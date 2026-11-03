@@ -1,7 +1,8 @@
 // @ts-check
 /**
  * Checks an app against the OPStead contract and says which level it reaches:
- * 1 health (/ops/health), 2 shape (components), 3 knowledge (context, tools), 4 hands (actions).
+ * 1 health (/ops/health), 2 shape (components, a hosting provider), 3 knowledge (context, tools),
+ * 4 hands (actions).
  * A level counts only when every level below it holds and it has no errors. Reads only: tools and
  * actions are never called.
  */
@@ -9,6 +10,7 @@
 export const KINDS = ["service", "job", "store", "external", "ui"];
 export const LEVELS = ["ok", "warn", "bad"];
 export const RISKS = ["low", "medium", "high"];
+export const PROVIDER_KINDS = ["hosting", "edge", "dns", "mail", "storage", "registrar"];
 const ID = /^[a-z][a-z0-9_]*$/;
 const DURATION = /^\d+(?:\.\d+)?\s*(?:ms|s|m|h|d)$/;
 /** Checks the operator adds itself (launchd, heartbeats, probes); an app never reports them. */
@@ -16,7 +18,7 @@ const OPERATOR_CHECKS = ["service_down", "heartbeat_missed", "job_failed", "http
 const LIMIT = /^\d+\s*\/\s*\d+\s*(?:ms|s|m|h|d)$/;
 
 /** @typedef {{ level: "error" | "warn" | "ok", where: string, message: string }} Finding */
-/** @typedef {{ url: string, app?: string, level: number, findings: Finding[], metrics?: boolean }} Report */
+/** @typedef {{ url: string, app?: string, level: number, findings: Finding[], metrics?: boolean, next?: string }} Report */
 
 const isObj = (/** @type {unknown} */ v) => typeof v === "object" && v !== null && !Array.isArray(v);
 const isStr = (/** @type {unknown} */ v) => typeof v === "string" && v.trim() !== "";
@@ -80,13 +82,13 @@ function validateParams(params, at, out) {
 /**
  * @param {unknown} body
  * @param {Set<string>} healthIds the check ids /ops/health reported now
- * @returns {{ findings: Finding[], has: { components: boolean, knowledge: boolean, actions: boolean }, errorsAt: { 2: boolean, 3: boolean, 4: boolean } }}
+ * @returns {{ findings: Finding[], has: { components: boolean, hosting: boolean, knowledge: boolean, actions: boolean }, errorsAt: { 2: boolean, 3: boolean, 4: boolean } }}
  */
 export function validateManifest(body, healthIds) {
   /** @type {Finding[]} */
   const out = [];
   const errorsAt = { 2: false, 3: false, 4: false };
-  const has = { components: false, knowledge: false, actions: false };
+  const has = { components: false, hosting: false, knowledge: false, actions: false };
   const add = (/** @type {2|3|4} */ lv, /** @type {"error"|"warn"} */ level, where, message) => {
     out.push({ level, where, message });
     if (level === "error") errorsAt[lv] = true;
@@ -134,6 +136,32 @@ export function validateManifest(body, healthIds) {
       add(2, "warn", "manifest.components", `${list.length} check id${list.length > 1 ? "s" : ""} named here ${list.length > 1 ? "are" : "is"} not in /ops/health right now (${list.slice(0, 8).join(", ")}${list.length > 8 ? ", …" : ""}): fine if reported only when failing; reporting them as ok shows the owner they are watched, and catches a misspelt id`);
     }
   }
+
+  // Level 2: providers, the companies the app relies on to run and to reach people.
+  const compIds = new Set(Array.isArray(comps) ? comps.filter((c) => isObj(c) && isStr(c.id)).map((c) => c.id) : []);
+  const provs = m.providers === undefined ? [] : m.providers;
+  if (!Array.isArray(provs)) add(2, "error", "manifest.providers", "must be an array of {kind, name, what?, serves?, status_url?}");
+  else {
+    const seen = new Set();
+    provs.forEach((p, i) => {
+      if (!isObj(p)) return add(2, "error", `manifest.providers[${i}]`, "not an object");
+      const at = `manifest.providers[${isStr(p.kind) ? p.kind : i}${isStr(p.name) ? ` · ${p.name}` : ""}]`;
+      const n = out.length;
+      if (!PROVIDER_KINDS.includes(p.kind)) add(2, "error", `${at}.kind`, `must be one of ${PROVIDER_KINDS.join(", ")}`);
+      if (!isStr(p.name)) add(2, "error", `${at}.name`, 'missing: the company ("IONOS", "Cloudflare"), or "self" for one of the operator\'s own machines');
+      if (p.what !== undefined && !isStr(p.what)) add(2, "error", `${at}.what`, "must be one line of text");
+      if (p.serves !== undefined && !(Array.isArray(p.serves) && p.serves.every(isStr))) add(2, "error", `${at}.serves`, "must be an array of component ids (omit it when every part needs it)");
+      else for (const s of p.serves ?? []) if (!compIds.has(s)) add(2, "error", `${at}.serves`, `"${s}" is not a component id`);
+      if (p.status_url !== undefined && !(isStr(p.status_url) && /^https?:\/\//.test(p.status_url))) add(2, "error", `${at}.status_url`, "must be the URL of a Statuspage-shaped /api/v2/status.json");
+      if (out.length > n) return;
+      const key = `${p.kind}\u0000${p.name.trim().toLowerCase()}`;
+      if (seen.has(key)) add(2, "warn", at, "appears twice");
+      seen.add(key);
+      if (p.kind === "hosting") has.hosting = true;
+    });
+  }
+  if (has.components && !has.hosting && !(Array.isArray(provs) && provs.some((p) => isObj(p) && p.kind === "hosting")))
+    add(2, "error", "manifest.providers", 'no hosting provider: level 2 needs one, e.g. {"kind": "hosting", "name": "IONOS"} or {"kind": "hosting", "name": "self"}');
 
   // Level 3: context and tools.
   if (isStr(m.context)) {
@@ -259,6 +287,8 @@ export async function checkApp(url, opts = {}) {
   findings.push(metrics ? { level: "ok", where: "metrics", message: "/ops/metrics answers" } : { level: "ok", where: "metrics", message: "/ops/metrics not served (optional, needed for no level)" });
 
   let manifest;
+  /** @type {string | undefined} */
+  let next;
   try {
     const res = await get("/ops/manifest");
     if (res.ok) manifest = await res.json().catch(() => null);
@@ -277,11 +307,12 @@ export async function checkApp(url, opts = {}) {
       else m.findings.push({ level: "ok", where: "runs", message: `/ops/runs answers (${runs.runs.length} recent)` });
       findings.push(m.findings.at(-1));
     }
-    if (level >= 1 && m.has.components && !m.errorsAt[2]) level = 2;
+    if (level >= 1 && m.has.components && m.has.hosting && !m.errorsAt[2]) level = 2;
     if (level >= 2 && m.has.knowledge && !m.errorsAt[3]) level = 3;
     if (level >= 3 && m.has.actions && !m.errorsAt[4]) level = 4;
+    if (level === 1 && m.has.components && !m.has.hosting) next = "Declare where the app runs in the manifest's providers: at least one hosting provider (the company, or \"self\" for one of the operator's machines).";
   }
-  return { url: base, app, level, findings, metrics };
+  return { url: base, app, level, findings, metrics, next: next ?? (NEXT[level] || undefined) };
 }
 
 export const LEVEL_NAMES = ["none", "health", "shape", "knowledge", "hands"];
@@ -289,7 +320,7 @@ export const LEVEL_NAMES = ["none", "health", "shape", "knowledge", "hands"];
 /** What to do next to reach the level above. */
 export const NEXT = [
   "Serve GET /ops/health: {app, version, status, checks: [{id, level, subject?, detail, data?}]} behind a bearer token.",
-  "Serve GET /ops/manifest with components: what the app is made of, what each depends on, which checks are about it.",
+  "Serve GET /ops/manifest with components (what the app is made of, what each depends on, which checks are about it) and providers (at least the hosting one: who runs it).",
   "Add context (what the app does, what is normal) and read-only tools to the manifest.",
   "Declare actions with risk, limit, rollback, dry_run, and serve POST /ops/actions/<name> that re-checks its preconditions (409 when they do not hold).",
   "",

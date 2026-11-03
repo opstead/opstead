@@ -1,4 +1,4 @@
-# The OPStead contract, version 0.2
+# The OPStead contract, version 0.3
 
 What an app serves about itself so that an operator (OPStead, or anything else that reads this) can
 watch it, place a problem in it, investigate it and, within limits the app sets, fix it.
@@ -18,7 +18,7 @@ only when every level below it holds. `opstead check <url>` reports the level an
 | Level | The app serves | The operator can then |
 |---|---|---|
 | 1 health | `GET /ops/health` | open one problem per thing that is wrong and tell the owner once per change |
-| 2 shape | `components` in `GET /ops/manifest` | draw the app and say which part is failing |
+| 2 shape | `components` and a `hosting` provider in `GET /ops/manifest` | draw the app and say which part is failing, and when the trouble is its host's or another company's |
 | 3 knowledge | `context` and `tools` in the manifest, `GET /ops/tools/<name>`; `operations` and `GET /ops/runs` for long work | let an AI investigate with the app's own data, knowing what is normal; tell when work got slower and which step |
 | 4 hands | `actions` in the manifest, `POST /ops/actions/<name>` | propose fixes; run the ones the policy allows; verify they worked |
 
@@ -88,7 +88,7 @@ Rules that make the ledger work:
   (`http_down`, `http_slow`, `service_down`, `heartbeat_missed`, `job_failed`). If `/ops/health`
   cannot answer at all, that is itself the signal.
 
-## Level 2: `GET /ops/manifest` with `components`
+## Level 2: `GET /ops/manifest` with `components` and `providers`
 
 The manifest is the app's description of itself for the operator and its AI. It changes when the
 code changes, not from request to request.
@@ -105,12 +105,17 @@ code changes, not from request to request.
     { "id": "supplier_a", "name": "Supplier A", "kind": "external", "url": "https://supplier-a.example", "checks": [{ "id": "stale", "subject": "supplier-a" }] },
     { "id": "payments", "name": "Payments", "kind": "external", "group": "Providers" },
     { "id": "site", "name": "the shop", "kind": "ui", "url": "https://shop.example", "probe": true, "depends_on": ["api"] }
+  ],
+  "providers": [
+    { "kind": "hosting", "name": "Hetzner", "what": "one VPS: the API, the sync and Postgres" },
+    { "kind": "edge", "name": "Cloudflare", "serves": ["site", "api"] }
   ]
 }
 ```
 
 Manifest fields at this level: `app` (SHOULD), `contract` (SHOULD: the version of this document the
-app follows, `"0.1"`), `version` (MAY), `components` (MUST for level 2).
+app follows, `"0.3"`), `version` (MAY), `components` (MUST for level 2), `providers` (MUST for level 2,
+with at least one `hosting` entry).
 
 Each component:
 
@@ -131,6 +136,35 @@ Each component:
 
 A component with no `checks`, `service`, `job`, `probe` or `app` shows as *not watched*; that is
 allowed (a `store` often is) but is worth a look.
+
+### `providers`
+
+The companies the app relies on to run and to reach people: its host, what carries its traffic, its
+DNS, its mail. They are dependencies like any other, and the most shared: when a host or an edge is in
+trouble, every part it serves fails with it, in every app it serves. Declared, the operator draws each
+company once, shared by everything that names it, watches the company's own status page, and tells a
+company's trouble above the parts it serves, in one notice, rather than as many unrelated failures. And
+moving the app to another host changes what is worth checking; the declaration is what tells the
+operator it moved.
+
+```json
+"providers": [
+  { "kind": "hosting", "name": "IONOS", "what": "shared hosting: Apache, PHP, MySQL" },
+  { "kind": "mail", "name": "IONOS", "serves": ["contact"] },
+  { "kind": "edge", "name": "Cloudflare" }
+]
+```
+
+| Field | | |
+|---|---|---|
+| `kind` | MUST | `hosting` (where it runs), `edge` (a CDN, proxy or tunnel in front of it), `dns`, `mail`, `storage` (files or backups at someone else's), `registrar`. |
+| `name` | MUST | The company, as people call it (`"IONOS"`, `"Cloudflare"`). `"self"` for hosting on the operator's own machine; that machine then says the rest. |
+| `what` | MAY | One line: what it provides (`"shared hosting: Apache, PHP, MySQL"`). |
+| `serves` | MAY | Ids of the components that need it. Each MUST be a component id. Omitted: every part of the app. |
+| `status_url` | MAY | The company's status page in the Statuspage shape (`…/api/v2/status.json`), for a company the operator does not already know. |
+
+Level 2 needs at least one `hosting` provider. Declare only what is known: a company read from the
+deploy setup or told by the owner, never guessed. A kind the app does not use (no mail sent) is left out.
 
 ## Level 3: knowledge
 
@@ -327,7 +361,7 @@ configuration how often each job should run, and opens `heartbeat_missed` when a
 
 ## Versioning
 
-This document is `0.2`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
+This document is `0.3`. Until `1.0`, fields may be added; a removal or a change of meaning bumps the
 minor version and is listed in [`CHANGES.md`](CHANGES.md). Operators ignore fields they do not know;
 apps ignore body fields they do not know.
 

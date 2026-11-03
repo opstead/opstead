@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @ts-check
 import { readFileSync } from "node:fs";
-import { checkApp, LEVEL_NAMES, NEXT } from "../lib/check.mjs";
+import { checkApp, LEVEL_NAMES } from "../lib/check.mjs";
 import { connect } from "../lib/connect.mjs";
 
 const HELP = `opstead: care for the apps you ship
@@ -13,7 +13,8 @@ Usage:
   Checks the app at <url> against the OPStead contract (/ops/health, /ops/manifest,
   /ops/metrics) and says which level it reaches:
     1 health     the app judges itself on /ops/health
-    2 shape      components: what it is made of and what depends on what
+    2 shape      components (what it is made of, what depends on what) and providers
+                 (who hosts it, carries it, sends its mail)
     3 knowledge  context and read-only tools for the AI
     4 hands      actions with risk, limits, rollback and verification
   It only reads; tools and actions are never called.
@@ -71,13 +72,13 @@ const errors = report.findings.filter((f) => f.level === "error").length;
 const unreachable = report.level === 0 && report.findings.some((f) => f.where === "health" && f.level === "error");
 
 if (json) {
-  console.log(JSON.stringify({ ...report, level_name: LEVEL_NAMES[report.level], next: NEXT[report.level] || null, errors }, null, 2));
+  console.log(JSON.stringify({ ...report, level_name: LEVEL_NAMES[report.level], next: report.next ?? null, errors }, null, 2));
 } else {
   const tty = process.stdout.isTTY;
   const c = (code, s) => (tty ? `\x1b[${code}m${s}\x1b[0m` : s);
   const mark = { error: c(31, "✗"), warn: c(33, "!"), ok: c(32, "✓") };
   console.log(`${report.app ?? report.url}: level ${report.level} (${LEVEL_NAMES[report.level]})`);
   for (const f of report.findings) console.log(`  ${mark[f.level]} ${f.where}: ${f.message}`);
-  if (NEXT[report.level]) console.log(`\nNext: ${NEXT[report.level]}`);
+  if (report.next) console.log(`\nNext: ${report.next}`);
 }
 process.exit(unreachable ? 2 : errors ? 1 : 0);
